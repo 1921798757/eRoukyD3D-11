@@ -1,0 +1,25 @@
+# 构建输出目录（CMake 生成的所有文件）
+build/
+
+# Visual Studio 用户设置
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.userosscache
+
+# Windows 系统文件
+Thumbs.db
+Desktop.ini
+
+# 编译中间文件
+*.obj
+*.ilk
+*.pdb
+*.idb
+*.ipdb
+*.iobj
+*.tlog
+*.log
+*.lastbuildstate
