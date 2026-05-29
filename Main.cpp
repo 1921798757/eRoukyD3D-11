@@ -15,7 +15,7 @@ int WINAPI WinMain(
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
-    GameApp theApp(hInstance, L"DirectX11 Initialization", 1280, 720);
+    GameApp theApp(hInstance, L"Rendering a Triangle", 1280, 720);
 
     if (!theApp.Init())
         return 0;
