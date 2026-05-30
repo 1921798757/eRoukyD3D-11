@@ -8,14 +8,6 @@
 #include <DirectXMath.h>
 #include "CpuTimer.h"
 
-
-/// 链接到库
-#pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "dxgi.lib")
-#pragma comment(lib, "dxguid.lib")
-#pragma comment(lib, "D3DCompiler.lib")
-#pragma comment(lib, "winmm.lib")
-
 class D3DApp
 {
 public:
