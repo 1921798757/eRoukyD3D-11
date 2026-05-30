@@ -1,3 +1,11 @@
+// ------------------------------
+// @file GameApp.cpp
+// @eRouky
+// GameApp类的实现文件，包含了游戏应用的初始化、资源加载、场景更新和绘制等功能
+// 继承自D3DApp类，重载了父类的虚函数以实现具体的游戏逻辑和渲染细节
+// ------------------------------
+// 
+//
 #include "GameApp.h"
 #include "d3dUtil.h"
 #include "DXTrace.h"
@@ -17,6 +25,12 @@ GameApp::~GameApp()
 {
 }
 
+// ------------------------------
+// GameApp::Init函数
+// ------------------------------
+// App的初始化
+// 返回值: true
+// 返回值: false
 bool GameApp::Init()
 {
     if (!D3DApp::Init())
@@ -41,6 +55,10 @@ void GameApp::UpdateScene(float dt)
 
 }
 
+// ------------------------------
+// GameApp::DrawScene函数
+// ------------------------------
+// 
 void GameApp::DrawScene()
 {
     assert(m_pd3dImmediateContext);
@@ -55,9 +73,15 @@ void GameApp::DrawScene()
     HR(m_pSwapChain->Present(0, 0));
 }
 
+// ------------------------------
+// GameApp::InitEffect函数
+// ------------------------------
+// 初始化着色器和输入布局
+// 返回值: true
+// 返回值: false
 bool GameApp::InitEffect()
 {
-    ComPtr<ID3DBlob> blob;
+    ComPtr<ID3DBlob> blob;// 用于存储编译后的着色器字节码，Binary Large Object，二进制大对象,只是一块单纯的内存缓冲区。
 
     // 创建顶点着色器
     HR(CreateShaderFromFile(L"HLSL\\Triangle_VS.cso", L"HLSL\\Triangle_VS.hlsl", "VS", "vs_5_0", blob.ReleaseAndGetAddressOf()));
@@ -73,14 +97,20 @@ bool GameApp::InitEffect()
     return true;
 }
 
+// ------------------------------
+// GameApp::InitResource函数
+// ------------------------------
+// 设置三角形顶点，并绑定好渲染管线各个阶段所需的资源
+// 返回值: true
+// 返回值: false
 bool GameApp::InitResource()
 {
     // 设置三角形顶点
     VertexPosColor vertices[] =
     {
-        { XMFLOAT3(0.0f, 0.5f, 0.5f), XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f) },
-        { XMFLOAT3(0.5f, -0.5f, 0.5f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) },
-        { XMFLOAT3(-0.5f, -0.5f, 0.5f), XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f) }
+        { XMFLOAT3(0.0f, 0.5f, 0.5f), XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f) },   //上顶点，绿色
+        { XMFLOAT3(0.5f, -0.5f, 0.5f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) },  //右下顶点，蓝色
+        { XMFLOAT3(-0.5f, -0.5f, 0.5f), XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f) }  //左下顶点，红色
     };
     // 设置顶点缓冲区描述
     D3D11_BUFFER_DESC vbd;

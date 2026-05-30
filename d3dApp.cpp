@@ -1,3 +1,12 @@
+// ------------------------------
+// @file d3dApp.cpp
+// @eRouky
+// D3DApp类的实现文件，包含了窗口和Direct3D的初始化，以及游戏主循环等功能
+// 不负责具体的游戏逻辑和渲染细节，这些由派生类来实现
+// ------------------------------
+// 
+
+
 #include "d3dApp.h"
 #include "d3dUtil.h"
 #include "DXTrace.h"
@@ -18,6 +27,15 @@ namespace
     // This is just used to forward Windows messages from a global window
     // procedure to our member function window procedure because we cannot
     // assign a member function to WNDCLASS::lpfnWndProc.
+    // g_pd3dApp 主要是负责解决Windows操作系统和Cpp代码之间的沟通矛盾
+    // Windows底层API是C写的，不是面向对象的，当你在屏幕上进行操作时，Windows会调用程序的一个程序来通知，
+    // 这个函数叫"Window precedure"，Windows规定，这个回调函数必须是一个全局的，纯C的函数。例如：
+    // LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+    // 但是我们引擎写的是Cpp的代码，我们希望把处理消息的逻辑放在D3DApp这个类中，
+    // D3DApp::MsgProc()，但是这个函数是一个成员函数，不是全局函数，Windows无法直接调用它。
+    // C++的普通成员函数内部是隐藏有this指针的，但是Windows操作系统无法直接调用，我们引入g_pd3dApp全局指针进行处理；
+    // 这个全局指针会指向this（在D3DApp的构造函数中）
+    // 则我们之后就可以直接进行return g_pd3dApp->MsgProc(hwnd, msg, wParam, lParam);这样的操作
     D3DApp* g_pd3dApp = nullptr;
 }
 
