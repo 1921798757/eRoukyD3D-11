@@ -69,7 +69,7 @@ void GameApp::DrawScene()
     m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
     // 绘制三角形
-    m_pd3dImmediateContext->Draw(3, 0);
+    m_pd3dImmediateContext->Draw(4, 0);
     HR(m_pSwapChain->Present(0, 0));
 }
 
@@ -108,9 +108,15 @@ bool GameApp::InitResource()
     // 设置三角形顶点
     VertexPosColor vertices[] =
     {
-        { XMFLOAT3(0.0f, 0.5f, 0.5f), XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f) },   //上顶点，绿色
-        { XMFLOAT3(0.5f, -0.5f, 0.5f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) },  //右下顶点，蓝色
-        { XMFLOAT3(-0.5f, -0.5f, 0.5f), XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f) }  //左下顶点，红色
+        { XMFLOAT3(-1.0f, -1.0f, 0.5f), XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f) },   //上顶点，绿色
+        { XMFLOAT3(-1.0f, 1.0f, 0.5f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) },  //右下顶点，蓝色
+        { XMFLOAT3(1.0f, -1.0f, 0.5f), XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f) },  //左下顶点，红色
+        { XMFLOAT3(1.0f, 1.0f, 0.5f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) }  //右下顶点，蓝色
+
+        
+        
+        // 注意, XMFLOAT3中的z值为0.5f, 因为默认的D3D11的近平面为0.0f, 远平面为1.0f,这里z值是深度
+        // DX的原点在视口的正中心，x轴上，y轴右是 第一象限
     };
     // 设置顶点缓冲区描述
     D3D11_BUFFER_DESC vbd;
@@ -136,7 +142,7 @@ bool GameApp::InitResource()
 
     m_pd3dImmediateContext->IASetVertexBuffers(0, 1, m_pVertexBuffer.GetAddressOf(), &stride, &offset);
     // 设置图元类型，设定输入布局
-    m_pd3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    m_pd3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     m_pd3dImmediateContext->IASetInputLayout(m_pVertexLayout.Get());
     // 将着色器绑定到渲染管线
     m_pd3dImmediateContext->VSSetShader(m_pVertexShader.Get(), nullptr, 0);
