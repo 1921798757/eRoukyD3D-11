@@ -3,6 +3,10 @@
 
 #include "d3dApp.h"
 
+// ------------------------------
+// 继承自D3DAPP
+// ------------------------------
+// 
 class GameApp : public D3DApp
 {
 public:
