@@ -12,9 +12,18 @@
 using namespace DirectX;
 
 const D3D11_INPUT_ELEMENT_DESC GameApp::VertexPosColor::inputLayout[2] = {
-    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-    { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
-};
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },   // POSITION语义，表示顶点位置，格式是3个32位浮点数，偏移量为0
+    { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }   // COLOR语义，表示顶点颜色，格式是4个32位浮点数，偏移量为12（因为前面有一个XMFLOAT3，占用12字节）
+};                                                                                          // 这里POSITION和COLOR是我们在HLSL着色器代码中定义的输入语义，必须与之对应，GPU才能正确地将顶点数据传递给着色器。     
+// 参数说明：语义名称、语义索引、数据格式、输入槽、起始偏移量、输入数据分类、实例数据步长
+// 1.语义名称：对应HLSL代码     float4 color : COLOR;等
+// 2.语义索引：当有多个相同语义时用来区分，例如：float4 color0 : COLOR0; float4 color1 : COLOR1;
+// 3.数据格式：DXGI_FORMAT_R32G32B32A32_FLOAT表示4个32位浮点数，DXGI_FORMAT_R32G32B32_FLOAT表示3个32位浮点数
+// 4.输入槽：当使用多个顶点缓冲区时用来区分，这里我们只有一个顶点缓冲区，所以设置为0；显卡有 0~15 共 16 个输入槽可以同时挂载不同的顶点缓冲区。我们刚刚绑在第 0 号槽。
+// 5.起始偏移量：表示该属性在每个顶点数据中的字节偏移量，POSITION在结构体的开头，所以是0，COLOR在POSITION之后，所以是12字节
+// 6.输入数据分类：“更新频率”。通常填D3D11_INPUT_PER_VERTEX_DATA，表示每个顶点都有一套数据；意思是这是按照“每个顶点”来读取数据的，而不是按照“每个实例”来读取数据的。对于我们这个简单的立方体来说，每个顶点都有自己的位置和颜色数据，所以我们使用D3D11_INPUT_PER_VERTEX_DATA。
+// 7.实例数据步长：当输入数据分类为D3D11_INPUT_PER_INSTANCE_DATA时，表示每个实例数据的字节大小，这里我们不使用实例数据，所以设置为0,
+// “实例化绘画”专用，只有当用一个模型画一万片不同位置的树叶（硬件实例化技术）时才会用到，平时画普通物体永远填0
 
 GameApp::GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWidth, int initHeight)
     : D3DApp(hInstance, windowName, initWidth, initHeight)
@@ -53,13 +62,28 @@ void GameApp::OnResize()
 void GameApp::UpdateScene(float dt)
 {
     
-    static float phi = 0.0f, theta = 0.0f;
+    static float phi = 0.0f, theta = 0.0f;          // φ (phi) 和 θ (theta) 是两个常用的角度变量，分别表示绕X轴和Y轴的旋转角度。通过不断增加它们的值，我们可以让立方体持续旋转起来。
     phi += 0.3f * dt, theta += 0.37f * dt;
-    m_CBuffer.world = XMMatrixTranspose(XMMatrixRotationX(phi) * XMMatrixRotationY(theta));
-    // 更新常量缓冲区，让立方体转起来
+    m_CBuffer.world = XMMatrixTranspose(XMMatrixRotationX(phi) * XMMatrixRotationY(theta)); // 通过XMMatrixRotationX和XMMatrixRotationY函数分别创建绕X轴和Y轴的旋转矩阵，然后将它们相乘得到一个组合的旋转矩阵，最后进行转置以匹配HLSL的矩阵布局。
+    // 更新常量缓冲区，让立方体转起来，其实是世界动起来，而摄像机不动
+
+
+    // 下方则是经典的“动态显存更新”流程(Map/Unmap)，每帧都要执行一次，以将CPU端修改后的常量缓冲区数据更新到GPU端的常量缓冲区中。
+    // 我们之前把cbd.Usage设置为D3D11_USAGE_DYNAMIC，并且给CPU赋予了写入权限，所以现在可以使用Map函数来获取常量缓冲区的内存指针，进行数据更新，然后再调用Unmap函数来完成更新。
+    // Map含义：向显卡申请一块显存的临时写字权限。显卡显存平时是锁死的，调用map就是申请解锁。
+    // Map函数的参数说明：
+    // m_pConstantBuffer.Get()：获取常量缓冲区对象的指针。
+    // 0：要映射的子资源索引，对于常量缓冲区来说通常是0。
+    // D3D11_MAP_WRITE_DISCARD：映射类型，表示我们要写入数据，并且不关心之前的数据内容，GPU可以直接丢弃之前的缓冲区内容，提供一块新的内存区域给我们写入，这样可以避免GPU和CPU之间的同步问题，提高性能。
+    // 0：映射选项，通常设置为0。
+    // &mappedData：输出参数，返回一个D3D11_MAPPED_SUBRESOURCE结构体，包含了一个指向映射内存的指针(mappedData.pData)和一些其他信息。
     D3D11_MAPPED_SUBRESOURCE mappedData;
     HR(m_pd3dImmediateContext->Map(m_pConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
-    memcpy_s(mappedData.pData, sizeof(m_CBuffer), &m_CBuffer, sizeof(m_CBuffer));
+    memcpy_s(                   // memcpy_s是Cpp的安全内存拷贝函数，它将CPU端算好的m_CBuffer数据拷贝到GPU端的常量缓冲区中
+        mappedData.pData,  
+         sizeof(m_CBuffer),
+          &m_CBuffer, 
+          sizeof(m_CBuffer));   
     m_pd3dImmediateContext->Unmap(m_pConstantBuffer.Get(), 0);
 }
 
@@ -69,8 +93,17 @@ void GameApp::DrawScene()
     assert(m_pSwapChain);
 
     static float black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };	// RGBA = (0,0,0,255)
-    m_pd3dImmediateContext->ClearRenderTargetView(m_pRenderTargetView.Get(), reinterpret_cast<const float*>(&black));
-    m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+    m_pd3dImmediateContext->ClearRenderTargetView(      // 清除渲染目标视图，填充为黑色
+        m_pRenderTargetView.Get(),                  
+        reinterpret_cast<const float*>(&black)          // &black不是 float ，也不是float* ,如果你直接写black，会退化成一个首元素地址指针，float*,
+                                                        // &black（对数组取地址），虽然它在内存里指向的起始位置和用black一样，但在cpp 编译器中，
+                                                        // 它被视为一个指向整个数组的指针，类型是float(*)[4]，而不是float*。所以需要用reinterpret_cast<const float*>(&black)来告诉编译器我们确实想要一个float*类型的指针。
+    );
+    m_pd3dImmediateContext->ClearDepthStencilView(
+        m_pDepthStencilView.Get(),
+         D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 
+         1.0f,      // 这是给深度缓冲区（Z-Buffer）设定的初始值。
+         0);        // 这是给模板缓冲区（Stencil Buffer）设定的初始值。
 
     // 绘制立方体
     m_pd3dImmediateContext->DrawIndexed(36, 0, 0);
@@ -123,22 +156,29 @@ bool GameApp::InitResource()
         { XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f) },
         { XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT4(0.0f, 1.0f, 1.0f, 1.0f) }
     };
-    // 设置顶点缓冲区描述
+    // 设置顶点缓冲区描述,vbd是Vertex Buffer Description的缩写
     D3D11_BUFFER_DESC vbd;
-    ZeroMemory(&vbd, sizeof(vbd));
-    vbd.Usage = D3D11_USAGE_IMMUTABLE;
-    vbd.ByteWidth = sizeof vertices;
+    ZeroMemory(&vbd, sizeof(vbd));  
+    vbd.Usage = D3D11_USAGE_IMMUTABLE;          // 该缓冲区的使用模式，IMMUTABLE表示只能被GPU读取，不能被CPU修改。适用于一次创建后不再修改的数据，如静态顶点数据。
+    vbd.ByteWidth = sizeof vertices;            // 该缓冲区的大小，单位是字节。这里我们直接用整个顶点数组的大小来设置
     vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    vbd.CPUAccessFlags = 0;
+    vbd.CPUAccessFlags = 0;                     // CPU访问权限，0表示CPU不能访问该缓冲区。对于IMMUTABLE类型的缓冲区，必须设置为0。
     // 新建顶点缓冲区
     D3D11_SUBRESOURCE_DATA InitData;
     ZeroMemory(&InitData, sizeof(InitData));
-    InitData.pSysMem = vertices;
-    HR(m_pd3dDevice->CreateBuffer(&vbd, &InitData, m_pVertexBuffer.GetAddressOf()));
+    InitData.pSysMem = vertices;                // Pointer to System Memory，指向系统内存中顶点数据的指针(数据在哪)。D3D11_SUBRESOURCE_DATA结构体用于
+                                                // 在创建资源时提供初始数据，这里我们将顶点数组的地址赋值给pSysMem成员，以便在创建顶点缓冲区时将这些数据复制到GPU内存中。
+   
+    HR(m_pd3dDevice->CreateBuffer(&vbd, 
+        &InitData, 
+        m_pVertexBuffer.GetAddressOf()) // 这里要传入一个指向ComPtr<ID3D11Buffer>的地址，以便CreateBuffer函数能够将创建好的缓冲区对象的地址写入到m_pVertexBuffer中
+    );                                  // 注意是双指针传入，因为CreateBuffer函数需要修改m_pVertexBuffer的值，使其指向新创建的缓冲区对象。
+                                        // 这里m_pVertexBuffer是一个ComPtr对象，GetAddressOf()函数返回一个指向内部指针的地址，以满足CreateBuffer函数的参数要求。
+
 
     // ******************
     // 索引数组
-    //
+    // 这是规定了三角面绘画顺序的索引数组，使用索引可以避免顶点数据的重复，节省内存和提高效率
     DWORD indices[] = {
         // 正面
         0, 1, 2,
@@ -160,7 +200,8 @@ bool GameApp::InitResource()
         3, 7, 4
     };
     // 设置索引缓冲区描述
-    D3D11_BUFFER_DESC ibd;
+    D3D11_BUFFER_DESC ibd;                      // Index Buffer Description的缩写,从底层来看，无论是vbd还是ibd，本质都是一块内存，所以它们的描述结构体是一样的，只不过我们为了代码的可读性和语义清晰，
+                                                // 分别定义了vbd和ibd来描述顶点缓冲区和索引缓冲区。       
     ZeroMemory(&ibd, sizeof(ibd));
     ibd.Usage = D3D11_USAGE_IMMUTABLE;
     ibd.ByteWidth = sizeof indices;
@@ -171,31 +212,39 @@ bool GameApp::InitResource()
     HR(m_pd3dDevice->CreateBuffer(&ibd, &InitData, m_pIndexBuffer.GetAddressOf()));
     // 输入装配阶段的索引缓冲区设置
     m_pd3dImmediateContext->IASetIndexBuffer(m_pIndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
-
+    // Device负责分配内存，创建资源，而上下文负责管理资源的使用和状态，控制渲染流水线。
+    // IASetIndexBuffer函数将索引缓冲区绑定到输入装配阶段，告诉GPU在绘制时使用这个索引缓冲区来获取顶点索引数据。参数说明：
+    // m_pIndexBuffer.Get()：获取索引缓冲区对象的指针。
+    // DXGI_FORMAT_R32_UINT：指定索引数据的格式，这里是32位无符号整数。
+    // 0：索引数据的起始偏移量，单位是字节，这里我们从索引缓冲区的开头开始使用。
 
     // ******************
     // 设置常量缓冲区描述
     //
     D3D11_BUFFER_DESC cbd;
     ZeroMemory(&cbd, sizeof(cbd));
-    cbd.Usage = D3D11_USAGE_DYNAMIC;
+    cbd.Usage = D3D11_USAGE_DYNAMIC;                // IMMUTABLE表示只能被GPU读取，不能被CPU修改。适用于一次创建后不再修改的数据，如静态顶点数据。
+                                                    // DYNAMIC表示可以被CPU写入，但只能被GPU读取，适用于需要频繁更新的数据，如每帧更新的常量缓冲区。
     cbd.ByteWidth = sizeof(ConstantBuffer);
     cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-    cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;    // 正是因为我们要频繁修改，所以必须给CPU赋予写入权限。
     // 新建常量缓冲区，不使用初始数据
-    HR(m_pd3dDevice->CreateBuffer(&cbd, nullptr, m_pConstantBuffer.GetAddressOf()));
-
+    HR(m_pd3dDevice->CreateBuffer(&cbd, nullptr, m_pConstantBuffer.GetAddressOf()));    
 
     // 初始化常量缓冲区的值
     // 如果你不熟悉这些矩阵，可以先忽略，待读完第四章后再回头尝试修改
     m_CBuffer.world = XMMatrixIdentity();	// 单位矩阵的转置是它本身
-    m_CBuffer.view = XMMatrixTranspose(XMMatrixLookAtLH(
+    m_CBuffer.view = XMMatrixTranspose(XMMatrixLookAtLH(    //LookAtLH的意思是：构建一个Left-Handed坐标系的注视摄像机，参数分别是：摄像机位置、目标点位置、上方向向量
         XMVectorSet(0.0f, 0.0f, -5.0f, 0.0f),
         XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f),
         XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f)
     ));
     m_CBuffer.proj = XMMatrixTranspose(XMMatrixPerspectiveFovLH(XM_PIDIV2, AspectRatio(), 1.0f, 1000.0f));
-
+    // XMMatrixPerspectiveFovLH 投影 / 镜头矩阵
+    // PerspectiveFovLH的意思是：构建一个Left-Handed坐标系下的透视镜头（Field of View）镜头。
+    // 参数分别是：视野角（垂直方向上的视野范围，单位是弧度，这里设置为90度，即XM_PIDIV2），        这里其实是Π/2 = 90度。
+    // 宽高比（AspectRatio()函数返回屏幕的宽高比），近裁剪面距离（1.0f）和远裁剪面距离（1000.0f）。
+    // 这些参数定义了摄像机的视锥体，决定了哪些物体会被渲染出来，以及它们在屏幕上的投影效果。
 
     // ******************
     // 给渲染管线各个阶段绑定好所需资源
@@ -210,7 +259,7 @@ bool GameApp::InitResource()
     m_pd3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     m_pd3dImmediateContext->IASetInputLayout(m_pVertexLayout.Get());
     // 将着色器绑定到渲染管线
-    m_pd3dImmediateContext->VSSetShader(m_pVertexShader.Get(), nullptr, 0);
+    m_pd3dImmediateContext->VSSetShader(m_pVertexShader.Get(), nullptr, 0);         //注意只能放一个shader，多个shader要多声明几个ComPtr变量来分别存储它们的指针
     // 将更新好的常量缓冲区绑定到顶点着色器
     m_pd3dImmediateContext->VSSetConstantBuffers(0, 1, m_pConstantBuffer.GetAddressOf());
 
