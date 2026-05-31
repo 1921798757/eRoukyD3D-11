@@ -62,29 +62,10 @@ void GameApp::OnResize()
 void GameApp::UpdateScene(float dt)
 {
     
-    static float phi = 0.0f, theta = 0.0f;          // φ (phi) 和 θ (theta) 是两个常用的角度变量，分别表示绕X轴和Y轴的旋转角度。通过不断增加它们的值，我们可以让立方体持续旋转起来。
+    static float phi = 0.0f, theta = 0.0f;          // φ (phi) 和 θ (theta) 是两个常用的角度变量，分别表示绕X轴和Y轴的旋转角度。通过不断增加它们的值，我们可以持续旋转。
     phi += 0.3f * dt, theta += 0.37f * dt;
-    m_CBuffer.world = XMMatrixTranspose(XMMatrixRotationX(phi) * XMMatrixRotationY(theta)); // 通过XMMatrixRotationX和XMMatrixRotationY函数分别创建绕X轴和Y轴的旋转矩阵，然后将它们相乘得到一个组合的旋转矩阵，最后进行转置以匹配HLSL的矩阵布局。
-    // 更新常量缓冲区，让立方体转起来，其实是世界动起来，而摄像机不动
-
-
-    // 下方则是经典的“动态显存更新”流程(Map/Unmap)，每帧都要执行一次，以将CPU端修改后的常量缓冲区数据更新到GPU端的常量缓冲区中。
-    // 我们之前把cbd.Usage设置为D3D11_USAGE_DYNAMIC，并且给CPU赋予了写入权限，所以现在可以使用Map函数来获取常量缓冲区的内存指针，进行数据更新，然后再调用Unmap函数来完成更新。
-    // Map含义：向显卡申请一块显存的临时写字权限。显卡显存平时是锁死的，调用map就是申请解锁。
-    // Map函数的参数说明：
-    // m_pConstantBuffer.Get()：获取常量缓冲区对象的指针。
-    // 0：要映射的子资源索引，对于常量缓冲区来说通常是0。
-    // D3D11_MAP_WRITE_DISCARD：映射类型，表示我们要写入数据，并且不关心之前的数据内容，GPU可以直接丢弃之前的缓冲区内容，提供一块新的内存区域给我们写入，这样可以避免GPU和CPU之间的同步问题，提高性能。
-    // 0：映射选项，通常设置为0。
-    // &mappedData：输出参数，返回一个D3D11_MAPPED_SUBRESOURCE结构体，包含了一个指向映射内存的指针(mappedData.pData)和一些其他信息。
-    D3D11_MAPPED_SUBRESOURCE mappedData;
-    HR(m_pd3dImmediateContext->Map(m_pConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
-    memcpy_s(                   // memcpy_s是Cpp的安全内存拷贝函数，它将CPU端算好的m_CBuffer数据拷贝到GPU端的常量缓冲区中
-        mappedData.pData,  
-         sizeof(m_CBuffer),
-          &m_CBuffer, 
-          sizeof(m_CBuffer));   
-    m_pd3dImmediateContext->Unmap(m_pConstantBuffer.Get(), 0);
+    XMMATRIX R = XMMatrixRotationX(phi) * XMMatrixRotationY(theta);   // 通过绕X轴旋转phi角度和绕Y轴旋转theta角度的矩阵乘积，得到一个综合的旋转矩阵
+    XMStoreFloat4x4(&m_BaseRotation, R);    // 将旋转矩阵存储到m_BaseRotation成员变量中，这个变量会在DrawScene函数中用来设置世界矩阵，从而实现立方体的旋转效果
 }
 
 void GameApp::DrawScene()
@@ -105,7 +86,27 @@ void GameApp::DrawScene()
          1.0f,      // 这是给深度缓冲区（Z-Buffer）设定的初始值。
          0);        // 这是给模板缓冲区（Stencil Buffer）设定的初始值。
 
-    // 绘制立方体
+    
+    
+
+    XMMATRIX baseRot = XMLoadFloat4x4(&m_BaseRotation);   // 从m_BaseRotation成员变量中加载旋转矩阵到一个XMMATRIX类型的变量baseRot中，这样我们就可以在GPU上使用这个旋转矩阵来变换顶点位置，实现立方体的旋转效果。
+    D3D11_MAPPED_SUBRESOURCE mappedData;    // 准备一个D3D11_MAPPED_SUBRESOURCE结构体来接收映射后的内存信息
+    // 左边的四棱锥(左移3m)
+    m_CBuffer.world = XMMatrixTranspose(baseRot * XMMatrixTranslation(-3.0f, 0.0f, 0.0f));   // world矩阵是一个组合矩阵，包含了基础旋转和一个平移变换，使得四棱锥位于立方体的左侧
+    // 打包给显卡
+    HR(m_pd3dImmediateContext->Map(m_pConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));   // 将常量缓冲区映射到CPU可访问的内存中，准备写入数据
+    memcpy_s(mappedData.pData, sizeof(m_CBuffer), &m_CBuffer, sizeof(m_CBuffer));   // 将C++中的常量缓冲区数据复制到映射后的内存中，这样GPU就能在渲染时使用这些数据了
+    m_pd3dImmediateContext->Unmap(m_pConstantBuffer.Get(), 0);   // 解除映射，告诉GPU我们已经完成了对常量缓冲区的更新，可以使用新的数据进行渲染了
+    // 绘制四棱锥
+    m_pd3dImmediateContext->DrawIndexed(18, 36, 0);
+
+
+    // 右边的立方体(右移3m)
+    m_CBuffer.world = XMMatrixTranspose(baseRot * XMMatrixTranslation(3.0f, 0.0f, 0.0f));    // world矩阵是一个组合矩阵，包含了基础旋转和一个平移变换，使得立方体位于四棱锥的右侧
+    // 打包给显卡
+    HR(m_pd3dImmediateContext->Map(m_pConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));   // 将常量缓冲区映射到CPU可访问的内存中，准备写入数据
+    memcpy_s(mappedData.pData, sizeof(m_CBuffer), &m_CBuffer, sizeof(m_CBuffer));   // 将C++中的常量缓冲区数据复制到映射后的内存中，这样GPU就能在渲染时使用这些数据了
+    m_pd3dImmediateContext->Unmap(m_pConstantBuffer.Get(), 0);   // 绘制立方体
     m_pd3dImmediateContext->DrawIndexed(36, 0, 0);
     HR(m_pSwapChain->Present(0, 0));
 }
@@ -147,14 +148,23 @@ bool GameApp::InitResource()
     //  0       3
     VertexPosColor vertices[] =
     {
-        { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f) },
-        { XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f) },
-        { XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT4(1.0f, 1.0f, 0.0f, 1.0f) },
-        { XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f) },
-        { XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) },
-        { XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT4(1.0f, 0.0f, 1.0f, 1.0f) },
-        { XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f) },
-        { XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT4(0.0f, 1.0f, 1.0f, 1.0f) }
+        // 立方体顶点
+        { XMFLOAT3(-1.0f, -1.0f, -1.0f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f) },    // 0
+        { XMFLOAT3(-1.0f, 1.0f, -1.0f), XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f) },     // 1
+        { XMFLOAT3(1.0f, 1.0f, -1.0f), XMFLOAT4(1.0f, 1.0f, 0.0f, 1.0f) },      // 2
+        { XMFLOAT3(1.0f, -1.0f, -1.0f), XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f) },     // 3
+        { XMFLOAT3(-1.0f, -1.0f, 1.0f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) },     // 4
+        { XMFLOAT3(-1.0f, 1.0f, 1.0f), XMFLOAT4(1.0f, 0.0f, 1.0f, 1.0f) },      // 5
+        { XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f) },       // 6
+        { XMFLOAT3(1.0f, -1.0f, 1.0f), XMFLOAT4(0.0f, 1.0f, 1.0f, 1.0f) },      // 7
+
+        // 四棱锥顶点
+        { XMFLOAT3(-1.0f, -0.5f, -1.0f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f) },    // 8
+        { XMFLOAT3(0.0f, 3.0f, 0.0f), XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f) },         // 9
+        { XMFLOAT3(-1.0f, -0.5f, 1.0f), XMFLOAT4(1.0f, 1.0f, 0.0f, 1.0f) },      // 10
+        { XMFLOAT3(1.0f, -0.5f, 1.0f), XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f) },       // 11
+        { XMFLOAT3(1.0f, -0.5f, -1.0f), XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f) }        // 12
+
     };
     // 设置顶点缓冲区描述,vbd是Vertex Buffer Description的缩写
     D3D11_BUFFER_DESC vbd;
@@ -180,6 +190,7 @@ bool GameApp::InitResource()
     // 索引数组
     // 这是规定了三角面绘画顺序的索引数组，使用索引可以避免顶点数据的重复，节省内存和提高效率
     DWORD indices[] = {
+        // 立方体
         // 正面
         0, 1, 2,
         2, 3, 0,
@@ -197,7 +208,15 @@ bool GameApp::InitResource()
         6, 7, 3,
         // 底面
         4, 0, 3,
-        3, 7, 4
+        3, 7, 4,
+
+        // 四棱锥
+        9, 8, 10,
+        9, 12, 8,
+        9, 11, 12,
+        9, 10, 11,
+        12, 11, 10,
+        12, 10, 8
     };
     // 设置索引缓冲区描述
     D3D11_BUFFER_DESC ibd;                      // Index Buffer Description的缩写,从底层来看，无论是vbd还是ibd，本质都是一块内存，所以它们的描述结构体是一样的，只不过我们为了代码的可读性和语义清晰，
@@ -235,7 +254,7 @@ bool GameApp::InitResource()
     // 如果你不熟悉这些矩阵，可以先忽略，待读完第四章后再回头尝试修改
     m_CBuffer.world = XMMatrixIdentity();	// 单位矩阵的转置是它本身
     m_CBuffer.view = XMMatrixTranspose(XMMatrixLookAtLH(    //LookAtLH的意思是：构建一个Left-Handed坐标系的注视摄像机，参数分别是：摄像机位置、目标点位置、上方向向量
-        XMVectorSet(0.0f, 0.0f, -5.0f, 0.0f),
+        XMVectorSet(0.0f, 0.0f, -10.0f, 0.0f),  // 相机从-5f退到-10f，离场景更远了，能看到更多的东西
         XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f),
         XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f)
     ));
