@@ -4,8 +4,10 @@
 CpuTimer::CpuTimer()
 {
     __int64 countsPerSec{};
-    QueryPerformanceFrequency((LARGE_INTEGER*)&countsPerSec);
-    m_SecondsPerCount = 1.0 / (double)countsPerSec;
+                                                                // LARGE_INTEGER是一个结构体，包含一个64位的整数，用于存储高精度计时器的频率和计数值。我们将其强制转换为__int64类型来获取计数值。
+                                                                // 这是历史原因，QueryPerformanceFrequency和QueryPerformanceCounter函数使用LARGE_INTEGER类型来返回结果，但我们更习惯使用__int64类型来处理这些值，所以这里进行了类型转换。
+    QueryPerformanceFrequency((LARGE_INTEGER*)&countsPerSec);   // 用于获取高精度计时器的频率，即每秒钟的计数次数。这个函数会将结果存储在countsPerSec变量中，单位是计数/秒。
+    m_SecondsPerCount = 1.0 / (double)countsPerSec;             // 计算每个计数的秒数，即1秒钟有多少个计数。这个值将用于将计数转换为秒。
 }
 
 
@@ -46,8 +48,8 @@ float CpuTimer::DeltaTime()const
 
 void CpuTimer::Reset()
 {
-    __int64 currTime{};
-    QueryPerformanceCounter((LARGE_INTEGER*)&currTime);
+    __int64 currTime{};             // {}大括号初始化，这是C++11引入的“统一初始化”语法。这句等同于 __int64 currTime = 0;，但使用大括号初始化可以防止一些类型转换错误，并且在某些情况下可以更清晰地表达意图。对于内置类型，使用{}初始化会将其值初始化为0。
+    QueryPerformanceCounter((LARGE_INTEGER*)&currTime); // 获取当前的计数值，单位是计数。这个值表示从系统启动到现在经过的计数次数。
 
     m_BaseTime = currTime;
     m_PrevTime = currTime;

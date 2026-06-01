@@ -73,7 +73,7 @@ void GameApp::UpdateScene(float dt)
     for(int i =0;i<13;i++)
     {
         // 加入顶点索引 i 作为相位差 (例如 i * 0.5f)
-    // 这样每个顶点在同一时刻的颜色都不一样，就能恢复漂亮的渐变和 3D 立体感！
+        // 这样每个顶点在同一时刻的颜色都不一样，就能恢复漂亮的渐变和 3D 立体感！
         m_Vertices[i].color.x = (sin(t * 3.0f + i * 0.5f) + 1.0f) / 2.0f; 
     
         // 蓝色通道也加入不同的相位差
@@ -109,7 +109,7 @@ void GameApp::DrawScene()
     
     
 
-    XMMATRIX baseRot = XMLoadFloat4x4(&m_BaseRotation);   // 从m_BaseRotation成员变量中加载旋转矩阵到一个XMMATRIX类型的变量baseRot中，这样我们就可以在GPU上使用这个旋转矩阵来变换顶点位置，实现立方体的旋转效果。
+    XMMATRIX baseRot = XMLoadFloat4x4(&m_BaseRotation);   // 从m_BaseRotation成员变量中加载旋转矩阵到一个XMMATRIX类型的变量baseRot中，这样我们就可以在GPU上使用这个旋转矩阵来变换顶点位置，实现旋转效果。
     D3D11_MAPPED_SUBRESOURCE mappedData;    // 准备一个D3D11_MAPPED_SUBRESOURCE结构体来接收映射后的内存信息
     // 左边的四棱锥(左移3m)
     m_CBuffer.world = XMMatrixTranspose(baseRot * XMMatrixTranslation(-3.0f, 0.0f, 0.0f));   // world矩阵是一个组合矩阵，包含了基础旋转和一个平移变换，使得四棱锥位于立方体的左侧
