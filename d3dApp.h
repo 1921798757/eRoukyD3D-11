@@ -8,6 +8,11 @@
 #include <DirectXMath.h>
 #include "CpuTimer.h"
 
+#include <imgui.h>
+#include <imgui_impl_dx11.h>
+#include <imgui_impl_win32.h>
+
+
 class D3DApp
 {
 public:
@@ -30,6 +35,7 @@ public:
 protected:
     bool InitMainWindow();      // 窗口初始化
     bool InitDirect3D();        // Direct3D初始化
+    bool InitImGui();           // ImGui初始化
 
     void CalculateFrameStats(); // 计算每秒帧数并在窗口显示
 
@@ -39,7 +45,7 @@ protected:
     HWND      m_hMainWnd;        // 主窗口句柄
     bool      m_AppPaused;       // 应用是否暂停
     bool      m_Minimized;       // 应用是否最小化
-    bool      m_Maximized;       // 应用是否最大化
+    bool      m_Maximized;       // 应用是否最大化InitImGui
     bool      m_Resizing;        // 窗口大小是否变化
     bool      m_Enable4xMsaa;    // 是否开启4倍多重采样
     UINT      m_4xMsaaQuality;   // MSAA支持的质量等级

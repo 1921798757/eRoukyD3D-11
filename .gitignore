@@ -13,6 +13,14 @@ build/
 Thumbs.db
 Desktop.ini
 
+# Dear ImGui 运行时配置文件
+imgui.ini
+
+# ImGui 目录只追踪源码文件（.h 和 .cpp）
+ImGui/*
+!ImGui/*.h
+!ImGui/*.cpp
+
 # 编译中间文件
 *.obj
 *.ilk
