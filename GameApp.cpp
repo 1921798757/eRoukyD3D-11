@@ -61,11 +61,31 @@ void GameApp::OnResize()
 
 void GameApp::UpdateScene(float dt)
 {
+    float t = m_Timer.TotalTime();  // 获取从Reset()调用之后经过的时间，但不包括暂停期间的时间，这个时间值可以用来驱动动画，使得动画的速度与帧率无关。
+
+    // =====================1.静态变换（矩阵算好存起来）======================
+    // 直接用总时间t乘以速度来计算绝对角度，这样无论帧率如何变化，旋转的速度都是恒定的。
+    XMMATRIX R = XMMatrixRotationX(0.3f * t) * XMMatrixRotationY(0.37f * t);   // 通过绕X轴旋转0.3倍的时间t和绕Y轴旋转0.37倍的时间t的矩阵乘积，得到一个综合的旋转矩阵
+    XMStoreFloat4x4(&m_BaseRotation, R);    // 将旋转矩阵存储到m_BaseRotation成员变量中，这个变量会在DrawScene函数中用来设置世界矩阵，从而实现旋转效果
+
+    // =====================2.动态形变（捏顶点的颜色）======================
+    // 遍历所有13个顶点，根据时间t动态修改它们的颜色属性，使得立方体和四棱锥的颜色会随着时间变化而产生动态的视觉效果。
+    for(int i =0;i<13;i++)
+    {
+        // 加入顶点索引 i 作为相位差 (例如 i * 0.5f)
+    // 这样每个顶点在同一时刻的颜色都不一样，就能恢复漂亮的渐变和 3D 立体感！
+        m_Vertices[i].color.x = (sin(t * 3.0f + i * 0.5f) + 1.0f) / 2.0f; 
     
-    static float phi = 0.0f, theta = 0.0f;          // φ (phi) 和 θ (theta) 是两个常用的角度变量，分别表示绕X轴和Y轴的旋转角度。通过不断增加它们的值，我们可以持续旋转。
-    phi += 0.3f * dt, theta += 0.37f * dt;
-    XMMATRIX R = XMMatrixRotationX(phi) * XMMatrixRotationY(theta);   // 通过绕X轴旋转phi角度和绕Y轴旋转theta角度的矩阵乘积，得到一个综合的旋转矩阵
-    XMStoreFloat4x4(&m_BaseRotation, R);    // 将旋转矩阵存储到m_BaseRotation成员变量中，这个变量会在DrawScene函数中用来设置世界矩阵，从而实现立方体的旋转效果
+        // 蓝色通道也加入不同的相位差
+        m_Vertices[i].color.z = (cos(t * 2.0f + i * 0.8f) + 1.0f) / 2.0f;
+    }
+
+    // =====================3.显存更新（发送给顶点缓冲区）======================
+    D3D11_MAPPED_SUBRESOURCE mappedData;    // 准备一个D3D11_MAPPED_SUBRESOURCE结构体来接收映射后的内存信息
+    // 注意这里的map是m_pVertexBuffer，而不是m_pConstantBuffer，因为我们要更新的是顶点数据，而不是常量缓冲区的数据
+    HR(m_pd3dImmediateContext->Map(m_pVertexBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));   // 将顶点缓冲区映射到CPU可访问的内存中，准备写入数据
+    memcpy_s(mappedData.pData, sizeof(m_Vertices), m_Vertices, sizeof(m_Vertices));   // 将修改后的顶点数据复制到映射后的内存中，这样GPU就能在渲染时使用这些新的顶点数据了
+    m_pd3dImmediateContext->Unmap(m_pVertexBuffer.Get(), 0);   // 解除映射，告诉GPU我们已经完成了对顶点缓冲区的更新，可以使用新的数据进行渲染了
 }
 
 void GameApp::DrawScene()
@@ -169,15 +189,20 @@ bool GameApp::InitResource()
     // 设置顶点缓冲区描述,vbd是Vertex Buffer Description的缩写
     D3D11_BUFFER_DESC vbd;
     ZeroMemory(&vbd, sizeof(vbd));  
-    vbd.Usage = D3D11_USAGE_IMMUTABLE;          // 该缓冲区的使用模式，IMMUTABLE表示只能被GPU读取，不能被CPU修改。适用于一次创建后不再修改的数据，如静态顶点数据。
-    vbd.ByteWidth = sizeof vertices;            // 该缓冲区的大小，单位是字节。这里我们直接用整个顶点数组的大小来设置
+    vbd.Usage = D3D11_USAGE_DYNAMIC;            // 从IMMUTABLE改为DYNAMIC，因为我们需要在每一帧更新常量缓冲区的数据，而顶点数据虽然不需要频繁修改，但为了代码的统一和简化，我们也设置为DYNAMIC，这样就可以使用同样的映射方式来更新顶点数据了。
+    vbd.ByteWidth = sizeof(vertices);            // 该缓冲区的大小，单位是字节。这里我们直接用整个顶点数组的大小来设置
     vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    vbd.CPUAccessFlags = 0;                     // CPU访问权限，0表示CPU不能访问该缓冲区。对于IMMUTABLE类型的缓冲区，必须设置为0。
+    vbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE; // CPU访问权限，D3D11_CPU_ACCESS_WRITE表示CPU可以写入该缓冲区。对于DYNAMIC类型的缓冲区，必须设置CPU访问权限。
+    
+    memcpy_s(m_Vertices, sizeof(m_Vertices), vertices, sizeof(vertices));   // 将顶点数据复制到成员变量m_Vertices中，这样我们就可以在需要更新顶点数据时直接修改m_Vertices数组，然后再将其复制到GPU缓冲区中。
+
     // 新建顶点缓冲区
     D3D11_SUBRESOURCE_DATA InitData;
     ZeroMemory(&InitData, sizeof(InitData));
-    InitData.pSysMem = vertices;                // Pointer to System Memory，指向系统内存中顶点数据的指针(数据在哪)。D3D11_SUBRESOURCE_DATA结构体用于
-                                                // 在创建资源时提供初始数据，这里我们将顶点数组的地址赋值给pSysMem成员，以便在创建顶点缓冲区时将这些数据复制到GPU内存中。
+    InitData.pSysMem = m_Vertices;// 使用成员变量m_Vertices的地址作为初始数据，这样在创建缓冲区时就会将这些数据复制到GPU内存中。我们之前定义了一个局部变量vertices来存储顶点数据，
+                                  // 但为了后续可能需要修改顶点数据，我们将其复制到成员变量m_Vertices中，并使用m_Vertices的地址来初始化顶点缓冲区。这样我们就可以在UpdateScene函数中
+                                  // 直接修改m_Vertices数组中的数据，然后再通过映射的方式更新GPU缓冲区中的数据，实现动态修改顶点信息的效果。
+                                  // 在创建资源时提供初始数据，这里我们将顶点数组的地址赋值给pSysMem成员，以便在创建顶点缓冲区时将这些数据复制到GPU内存中。
    
     HR(m_pd3dDevice->CreateBuffer(&vbd, 
         &InitData, 
