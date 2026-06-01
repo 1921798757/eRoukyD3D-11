@@ -22,20 +22,13 @@ extern "C"
     __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0x00000001;
 }
 
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 namespace
 {
     // This is just used to forward Windows messages from a global window
     // procedure to our member function window procedure because we cannot
     // assign a member function to WNDCLASS::lpfnWndProc.
-    // g_pd3dApp 主要是负责解决Windows操作系统和Cpp代码之间的沟通矛盾
-    // Windows底层API是C写的，不是面向对象的，当你在屏幕上进行操作时，Windows会调用程序的一个程序来通知，
-    // 这个函数叫"Window precedure"，Windows规定，这个回调函数必须是一个全局的，纯C的函数。例如：
-    // LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-    // 但是我们引擎写的是Cpp的代码，我们希望把处理消息的逻辑放在D3DApp这个类中，
-    // D3DApp::MsgProc()，但是这个函数是一个成员函数，不是全局函数，Windows无法直接调用它。
-    // C++的普通成员函数内部是隐藏有this指针的，但是Windows操作系统无法直接调用，我们引入g_pd3dApp全局指针进行处理；
-    // 这个全局指针会指向this（在D3DApp的构造函数中）
-    // 则我们之后就可以直接进行return g_pd3dApp->MsgProc(hwnd, msg, wParam, lParam);这样的操作
     D3DApp* g_pd3dApp = nullptr;
 }
 
@@ -79,6 +72,9 @@ D3DApp::~D3DApp()
     // 恢复所有默认设定
     if (m_pd3dImmediateContext)
         m_pd3dImmediateContext->ClearState();
+    ImGui_ImplDX11_Shutdown();
+    ImGui_ImplWin32_Shutdown();
+    ImGui::DestroyContext();
 }
 
 HINSTANCE D3DApp::AppInst()const
@@ -116,6 +112,9 @@ int D3DApp::Run()
             if (!m_AppPaused)
             {
                 CalculateFrameStats();
+                ImGui_ImplDX11_NewFrame();
+                ImGui_ImplWin32_NewFrame();
+                ImGui::NewFrame();
                 UpdateScene(m_Timer.DeltaTime());
                 DrawScene();
             }
@@ -135,6 +134,9 @@ bool D3DApp::Init()
         return false;
 
     if (!InitDirect3D())
+        return false;
+
+    if (!InitImGui())
         return false;
 
     return true;
@@ -189,7 +191,7 @@ void D3DApp::OnResize()
         depthStencilDesc.SampleDesc.Count = 1;
         depthStencilDesc.SampleDesc.Quality = 0;
     }
-    
+
 
 
     depthStencilDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -224,6 +226,9 @@ void D3DApp::OnResize()
 
 LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
+    if (ImGui_ImplWin32_WndProcHandler(m_hMainWnd, msg, wParam, lParam))
+        return true;
+
     switch (msg)
     {
         // WM_ACTIVATE is sent when the window is activated or deactivated.  
@@ -332,16 +337,6 @@ LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         ((MINMAXINFO*)lParam)->ptMinTrackSize.y = 200;
         return 0;
 
-    case WM_LBUTTONDOWN:
-    case WM_MBUTTONDOWN:
-    case WM_RBUTTONDOWN:
-        return 0;
-    case WM_LBUTTONUP:
-    case WM_MBUTTONUP:
-    case WM_RBUTTONUP:
-        return 0;
-    case WM_MOUSEMOVE:
-        return 0;
     }
 
     return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -536,7 +531,7 @@ bool D3DApp::InitDirect3D()
         HR(dxgiFactory1->CreateSwapChain(m_pd3dDevice.Get(), &sd, m_pSwapChain.GetAddressOf()));
     }
 
-
+    
 
     // 可以禁止alt+enter全屏
     dxgiFactory1->MakeWindowAssociation(m_hMainWnd, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES);
@@ -550,6 +545,25 @@ bool D3DApp::InitDirect3D()
     OnResize();
 
     return true;
+}
+
+bool D3DApp::InitImGui()
+{
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // 允许键盘控制
+    io.ConfigWindowsMoveFromTitleBarOnly = true;              // 仅允许标题拖动
+
+    // 设置Dear ImGui风格
+    ImGui::StyleColorsDark();
+
+    // 设置平台/渲染器后端
+    ImGui_ImplWin32_Init(m_hMainWnd);
+    ImGui_ImplDX11_Init(m_pd3dDevice.Get(), m_pd3dImmediateContext.Get());
+
+    return true;
+
 }
 
 void D3DApp::CalculateFrameStats()
