@@ -21,11 +21,11 @@ private:
     double m_SecondsPerCount = 0.0;
     double m_DeltaTime = -1.0;
 
-    __int64 m_BaseTime = 0;
-    __int64 m_PausedTime = 0;
-    __int64 m_StopTime = 0;
-    __int64 m_PrevTime = 0;
-    __int64 m_CurrTime = 0;
+    __int64 m_BaseTime = 0;         // 刚启动或者调用Reset()时的那一瞬的滴答数
+    __int64 m_PausedTime = 0;       // 总暂停时长
+    __int64 m_StopTime = 0;         // 按下暂停键（切出游戏窗口）那一瞬间的滴答数
+    __int64 m_PrevTime = 0;         // 上一帧的时间点的滴答数，用来与当前帧相减，算出dt
+    __int64 m_CurrTime = 0;         // 当前时间点的滴答数，每一帧都要更新这个值。它与m_PrevTime的差值就是每一帧的时间增量（dt），用来驱动动画和游戏逻辑，使得它们与帧率无关。
 
     bool m_Stopped = false;
 };
