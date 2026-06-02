@@ -8,9 +8,9 @@
 #include <DirectXMath.h>
 #include "CpuTimer.h"
 
-#include <imgui.h>
-#include <imgui_impl_dx11.h>
-#include <imgui_impl_win32.h>
+#include <imgui.h>                  // ImGui 的核心逻辑（按钮、窗口、状态管理）。
+#include <imgui_impl_dx11.h>        // 平台后端。负责告诉 ImGui 如何与 Windows 操作系统交互（获取鼠标位置、键盘按键、窗口大小）。
+#include <imgui_impl_win32.h>       // 渲染后端。负责告诉 ImGui 如何把生成的 UI 顶点数据，通过 DirectX 11 转换成 GPU 指令画到屏幕上。
 
 
 class D3DApp
