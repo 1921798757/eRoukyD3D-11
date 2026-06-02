@@ -41,15 +41,15 @@ file(GLOB HEADER_FILES ./*.h)
 
 aux_source_directory(. DIR_SRCS)
 
-# 创建可执行文件并链接库
-add_executable(${TARGET_NAME} WIN32 ${DIR_SRCS} ${HEADER_FILES})
+# 创建可执行文件并链接库 (直接将HLSL_FILES放入可执行文件，确保不管是否开启静态编译，在IDE中都始终可见)
+add_executable(${TARGET_NAME} WIN32 ${DIR_SRCS} ${HEADER_FILES} ${HLSL_FILES})
 target_link_libraries(${TARGET_NAME} d3d11.lib dxgi.lib dxguid.lib D3DCompiler.lib winmm.lib d2d1.lib dwrite.lib)
 
 # 在 IDE 中对 HLSL 文件进行分组显示
 source_group("HLSL Files" FILES ${HLSL_FILES})
 
-# 设置目标属性：输出文件名及输出路径
-set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME ${TARGET_NAME})
+# 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "Lighting")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -59,7 +59,7 @@ set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
 
 # 着色器静态编译
 if (${SHADER_STATIC_COMPILE})
-    target_sources(${TARGET_NAME} PRIVATE ${HLSL_FILES})
+    # 已将 target_sources 移除，因为上方 add_executable 已经包含了 HLSL_FILES
     foreach(HLSL_FILE ${HLSL_FILES})
         get_filename_component(HLSL_FDIR ${HLSL_FILE} DIRECTORY)
         get_filename_component(HLSL_FBASENAME_WE ${HLSL_FILE} NAME_WE)
