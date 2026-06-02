@@ -57,7 +57,8 @@ void GameApp::UpdateScene(float dt)
     
     //
     // 自定义窗口与操作
-    //
+    // 这里采用static是因为，ImGui是“即时模式”，UpdateScene每一帧都会被调用，如果不加上static，那么每一帧这些变量都会被重新初始化，导致无法正常使用。
+    // 通过ImGui的控件来修改这些变量的值，进而影响场景中物体的变换和渲染效果。
     static float tx = 0.0f, ty = 0.0f, phi = 0.0f, theta = 0.0f, scale = 1.0f, fov = XM_PIDIV2;
     static bool animateCube = true, customColor = false;
     if (animateCube)
@@ -66,7 +67,7 @@ void GameApp::UpdateScene(float dt)
         phi = XMScalarModAngle(phi);
         theta = XMScalarModAngle(theta);
     }
-    if (ImGui::Begin("Use ImGui"))
+    if (ImGui::Begin("Use ImGui"))      // 定义了一个名为 "Use ImGui" 的独立面板。
     {
         ImGui::Checkbox("Animate Cube", &animateCube);
         ImGui::SameLine(0.0f, 25.0f);

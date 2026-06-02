@@ -22,6 +22,8 @@ extern "C"
     __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0x00000001;
 }
 
+
+// 向编译器声明一个外部函数，一边我们能够在D3DApp.cpp中调用它，将Windows消息传递给ImGui的Win32后端进行处理（MsgProc）
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 namespace
@@ -112,9 +114,12 @@ int D3DApp::Run()
             if (!m_AppPaused)
             {
                 CalculateFrameStats();
-                ImGui_ImplDX11_NewFrame();
+
+                //===================
+                ImGui_ImplDX11_NewFrame();  // 这部分插入三个ImGui函数，启动ImGui新的一帧的绘制与记录
                 ImGui_ImplWin32_NewFrame();
                 ImGui::NewFrame();
+                //===================
                 UpdateScene(m_Timer.DeltaTime());
                 DrawScene();
             }
@@ -227,8 +232,9 @@ void D3DApp::OnResize()
 LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(m_hMainWnd, msg, wParam, lParam))
-        return true;
-
+        return true;    // 这是拦截处理,比如用户发出WM_LBUTTONDOWN,
+                        // 如果这个信息是ImGui的，那么ImGui_ImplWin32_WndProcHandler这个会拦截处理掉，并且返回true，告诉我们这个消息已经被ImGui处理了，我们就不需要再处理了
+            
     switch (msg)
     {
         // WM_ACTIVATE is sent when the window is activated or deactivated.  
@@ -550,7 +556,7 @@ bool D3DApp::InitDirect3D()
 bool D3DApp::InitImGui()
 {
     IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+    ImGui::CreateContext();             // 创建了 ImGui 的内部状态机
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // 允许键盘控制
     io.ConfigWindowsMoveFromTitleBarOnly = true;              // 仅允许标题拖动
@@ -559,11 +565,12 @@ bool D3DApp::InitImGui()
     ImGui::StyleColorsDark();
 
     // 设置平台/渲染器后端
+    // ImGui_ImplWin32_Init 和 ImGui_ImplDX11_Init则是
+    // 把你的游戏窗口 (m_hMainWnd) 和 DX11 设备 (m_pd3dDevice) 绑定给 ImGui，让它有了感知输入和输出画面的能力。 
     ImGui_ImplWin32_Init(m_hMainWnd);
     ImGui_ImplDX11_Init(m_pd3dDevice.Get(), m_pd3dImmediateContext.Get());
 
     return true;
-
 }
 
 void D3DApp::CalculateFrameStats()
