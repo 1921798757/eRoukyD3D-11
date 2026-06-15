@@ -1,9 +1,5 @@
 //***************************************************************************************
-// Geometry.h by X_Jun(MKXJun) (C) 2018-2022 All Rights Reserved.
-// Licensed under the MIT License.
-//
 // 生成常见的几何体网格模型
-// Generate common geometry meshes.
 //***************************************************************************************
 
 #ifndef GEOMETRY_H_
@@ -95,6 +91,7 @@ namespace Geometry
 
 
 
+
 namespace Geometry
 {
     namespace Internal
@@ -103,6 +100,8 @@ namespace Geometry
         // 以下结构体和函数仅供内部实现使用
         //
 
+        // 内部顶点数据结构：包含所有可能的顶点属性（位置、法线、切线、颜色、纹理坐标），
+        // 供 InsertVertexElement 从中选择性复制到目标顶点类型。
         struct VertexData
         {
             DirectX::XMFLOAT3 pos;
@@ -112,19 +111,23 @@ namespace Geometry
             DirectX::XMFLOAT2 tex;
         };
 
-        // 根据目标顶点类型选择性将数据插入
+        // 根据目标顶点类型 VertexType 的 inputLayout 语义信息，
+        // 将 vertexSrc 中对应范围的字节数据拷贝到 vertexDst 中对应偏移处。
+        // 这是实现"通用顶点生成"的关键：无论目标顶点格式是什么，
+        // 只要其 inputLayout 包含 POSITION / NORMAL / TANGENT / COLOR / TEXCOORD 中的部分或全部语义，
+        // 此函数就能正确地将数据填入对应的成员位置。
         template<class VertexType>
         inline void InsertVertexElement(VertexType& vertexDst, const VertexData& vertexSrc)
         {
             static std::string semanticName;
             static const std::map<std::string, std::pair<size_t, size_t>> semanticSizeMap = {
-                {"POSITION", std::pair<size_t, size_t>(0, 12)},
-                {"NORMAL", std::pair<size_t, size_t>(12, 24)},
-                {"TANGENT", std::pair<size_t, size_t>(24, 40)},
-                {"COLOR", std::pair<size_t, size_t>(40, 56)},
-                {"TEXCOORD", std::pair<size_t, size_t>(56, 64)}
+                {"POSITION", std::pair<size_t, size_t>(0, 12)},     // 0~12
+                {"NORMAL", std::pair<size_t, size_t>(12, 24)},      // 12~24
+                {"TANGENT", std::pair<size_t, size_t>(24, 40)},     // 24~40
+                {"COLOR", std::pair<size_t, size_t>(40, 56)},       // 40~56
+                {"TEXCOORD", std::pair<size_t, size_t>(56, 64)}     // 56~64
             };
-
+            // ARRYSIZE:在编译期，计算出一个普通 C 风格数组里有多少个元素。
             for (size_t i = 0; i < ARRAYSIZE(VertexType::inputLayout); i++)
             {
                 semanticName = VertexType::inputLayout[i].SemanticName;
@@ -141,6 +144,18 @@ namespace Geometry
     // 几何体方法的实现
     //
 
+    // ----------------------------------------------------------
+    // CreateSphere — 创建球体网格
+    // 参数：
+    //   radius : 球体半径
+    //   levels : 纬度分割数（越多越圆滑）
+    //   slices : 经度分割数（越多越圆滑）
+    //   color  : 顶点颜色
+    // 说明：
+    //   球体几何由经纬度网格构成，先放顶端点（北极），
+    //   然后逐层生成中间纬圈顶点，最后放底端点（南极）。
+    //   同时为每个顶点计算法线（归一化位置向量）和切线。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreateSphere(float radius, UINT levels, UINT slices, const DirectX::XMFLOAT4 & color)
     {
@@ -230,6 +245,18 @@ namespace Geometry
         return meshData;
     }
 
+    // ----------------------------------------------------------
+    // CreateBox — 创建立方体网格
+    // 参数：
+    //   width  : X 轴方向宽度
+    //   height : Y 轴方向高度
+    //   depth  : Z 轴方向深度
+    //   color  : 顶点颜色
+    // 说明：
+    //   立方体由 6 个面构成（右/左/顶/底/背/正），
+    //   每个面由 4 个顶点组成，共 24 个顶点（因为每个面需要独立的法线/切线/纹理坐标）。
+    //   索引数组直接列出 12 个三角形（每面 2 个）。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreateBox(float width, float height, float depth, const DirectX::XMFLOAT4 & color)
     {
@@ -326,6 +353,19 @@ namespace Geometry
         return meshData;
     }
 
+    // ----------------------------------------------------------
+    // CreateCylinder — 创建完整圆柱体网格（含顶盖和底盖）
+    // 参数：
+    //   radius : 圆柱半径
+    //   height : 圆柱高度
+    //   slices : 圆周分割数（越多越圆滑）
+    //   stacks : 高度方向分割数
+    //   texU, texV : 纹理坐标缩放
+    //   color  : 顶点颜色
+    // 说明：
+    //   先调用 CreateCylinderNoCap 生成侧面，再额外添加顶部和底部的圆形面。
+    //   顶部和底部分别由圆心顶点和圆周上的顶点构成扇形三角形网格。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreateCylinder(float radius, float height, UINT slices, UINT stacks,
         float texU, float texV, const DirectX::XMFLOAT4 & color)
@@ -400,6 +440,20 @@ namespace Geometry
         return meshData;
     }
 
+    // ----------------------------------------------------------
+    // CreateCylinderNoCap — 创建圆柱体侧面网格（无顶盖和底盖）
+    // 参数：
+    //   radius : 圆柱半径
+    //   height : 圆柱高度
+    //   slices : 圆周分割数
+    //   stacks : 高度方向分割数
+    //   texU, texV : 纹理坐标缩放
+    //   color  : 顶点颜色
+    // 说明：
+    //   按照"自底向上"的顺序逐层生成侧面顶点，
+    //   每层包含 (slices + 1) 个顶点（首尾重合以支持纹理环绕）。
+    //   索引按两个三角形构成一个四边形网格的方式排列。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreateCylinderNoCap(float radius, float height, UINT slices, UINT stacks,
         float texU, float texV, const DirectX::XMFLOAT4 & color)
@@ -457,6 +511,17 @@ namespace Geometry
         return meshData;
     }
 
+    // ----------------------------------------------------------
+    // CreateCone — 创建完整圆锥体网格（含底面）
+    // 参数：
+    //   radius : 底面半径
+    //   height : 圆锥高度
+    //   slices : 圆周分割数
+    //   color  : 顶点颜色
+    // 说明：
+    //   先调用 CreateConeNoCap 生成侧面，再添加底面圆形面。
+    //   底面由圆心和圆周上的顶点构成扇形三角形网格。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     MeshData<VertexType, IndexType> CreateCone(float radius, float height, UINT slices, const DirectX::XMFLOAT4& color)
     {
@@ -500,6 +565,18 @@ namespace Geometry
         return meshData;
     }
 
+    // ----------------------------------------------------------
+    // CreateConeNoCap — 创建圆锥体侧面网格（无底面）
+    // 参数：
+    //   radius : 底面半径
+    //   height : 圆锥高度
+    //   slices : 圆周分割数
+    //   color  : 顶点颜色
+    // 说明：
+    //   顶点分为两组：前 slices 个为尖端顶点（位置相同但法线/切线不同），
+    //   后 slices 个为底部圆周顶点。每个三角形由尖端的一个顶点和底部相邻两个顶点构成。
+    //   法线沿圆锥斜面方向（由底部指向尖端）。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     MeshData<VertexType, IndexType> CreateConeNoCap(float radius, float height, UINT slices, const DirectX::XMFLOAT4& color)
     {
@@ -548,12 +625,31 @@ namespace Geometry
         return meshData;
     }
 
+    // ----------------------------------------------------------
+    // Create2DShow — 创建 2D 屏幕空间四边形（使用 XMFLOAT2 版）
+    // 参数：
+    //   center : NDC 中心坐标
+    //   scale  : NDC 半尺寸
+    //   color  : 顶点颜色
+    // 说明：
+    //   委托给下面的 float 重载版本。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> Create2DShow(const DirectX::XMFLOAT2& center, const DirectX::XMFLOAT2 & scale, const DirectX::XMFLOAT4 & color)
     {
         return Create2DShow<VertexType, IndexType>(center.x, center.y, scale.x, scale.y, color);
     }
 
+    // ----------------------------------------------------------
+    // Create2DShow — 创建 2D 屏幕空间四边形（float 参数版）
+    // 参数：
+    //   centerX, centerY : NDC 中心坐标（范围 [-1, 1]）
+    //   scaleX, scaleY   : NDC 半尺寸
+    //   color            : 顶点颜色
+    // 说明：
+    //   在 NDC 空间中生成一个矩形四边形，用于 2D 全屏渲染或后处理。
+    //   顶点按逆时针顺序排列，纹理坐标覆盖整个 [0,1] 区间。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> Create2DShow(float centerX, float centerY, float scaleX, float scaleY, const DirectX::XMFLOAT4 & color)
     {
@@ -585,6 +681,15 @@ namespace Geometry
         return meshData;
     }
 
+    // ----------------------------------------------------------
+    // CreatePlane — 创建平面网格（XMFLOAT2 版）
+    // 参数：
+    //   planeSize   : 平面尺寸 (width, depth)
+    //   maxTexCoord : 最大纹理坐标 (u, v)
+    //   color       : 顶点颜色
+    // 说明：
+    //   委托给下面的 float 重载版本。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreatePlane(const DirectX::XMFLOAT2 & planeSize,
         const DirectX::XMFLOAT2 & maxTexCoord, const DirectX::XMFLOAT4 & color)
@@ -592,6 +697,18 @@ namespace Geometry
         return CreatePlane<VertexType, IndexType>(planeSize.x, planeSize.y, maxTexCoord.x, maxTexCoord.y, color);
     }
 
+    // ----------------------------------------------------------
+    // CreatePlane — 创建平面网格（float 参数版）
+    // 参数：
+    //   width  : X 轴方向宽度
+    //   depth  : Z 轴方向深度
+    //   texU   : 纹理 U 方向最大坐标
+    //   texV   : 纹理 V 方向最大坐标
+    //   color  : 顶点颜色
+    // 说明：
+    //   在 XZ 平面上（Y=0）生成长方形网格，法线朝上 (+Y)，
+    //   由 4 个顶点和 2 个三角形构成。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreatePlane(float width, float depth, float texU, float texV, const DirectX::XMFLOAT4 & color)
     {
@@ -622,6 +739,19 @@ namespace Geometry
         meshData.indexVec = { 0, 1, 2, 2, 3, 0 };
         return meshData;
     }
+
+    // ----------------------------------------------------------
+    // CreateTerrain — 创建地形网格（XMFLOAT2/XMUINT2 版）
+    // 参数：
+    //   terrainSize  : 地形尺寸 (width, depth)
+    //   slices       : 分割数 (slicesX, slicesZ)
+    //   maxTexCoord  : 最大纹理坐标
+    //   heightFunc   : 高度函数 f(x, z) -> 高度 y
+    //   normalFunc   : 法线函数 f(x, z) -> 法线向量
+    //   colorFunc    : 颜色函数 f(x, z) -> 顶点颜色
+    // 说明：
+    //   委托给下面的 float 重载版本。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     MeshData<VertexType, IndexType> CreateTerrain(const DirectX::XMFLOAT2& terrainSize, const DirectX::XMUINT2& slices,
         const DirectX::XMFLOAT2& maxTexCoord, const std::function<float(float, float)>& heightFunc,
@@ -632,6 +762,22 @@ namespace Geometry
             maxTexCoord.x, maxTexCoord.y, heightFunc, normalFunc, colorFunc);
     }
 
+    // ----------------------------------------------------------
+    // CreateTerrain — 创建地形网格（float 参数版）
+    // 参数：
+    //   width      : X 轴方向宽度
+    //   depth      : Z 轴方向深度
+    //   slicesX    : X 方向分割数
+    //   slicesZ    : Z 方向分割数
+    //   texU, texV : 纹理坐标缩放
+    //   heightFunc : 高度函数 f(x, z) -> 高度 y
+    //   normalFunc : 法线函数 f(x, z) -> 法线向量
+    //   colorFunc  : 颜色函数 f(x, z) -> 顶点颜色
+    // 说明：
+    //   在 XZ 平面上生成规则网格，然后根据 heightFunc 调整每个顶点的 Y 值。
+    //   索引按两个三角形构成一个四边形网格的方式排列。
+    //   同时计算每点的法线（由 normalFunc 提供）和切线（由法线推导）。
+    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     MeshData<VertexType, IndexType> CreateTerrain(float width, float depth, UINT slicesX, UINT slicesZ,
         float texU, float texV, const std::function<float(float, float)>& heightFunc,
@@ -705,7 +851,4 @@ namespace Geometry
 }
 
 
-
 #endif
-
-
