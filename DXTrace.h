@@ -1,10 +1,5 @@
-//***************************************************************************************
-// DXTrace.h by X_Jun(MKXJun) (C) 2018-2022 All Rights Reserved.
-// Licensed under the MIT License.
-//
 // DirectX错误追踪 
-// DirectX Error Tracing. 
-//***************************************************************************************
+
 
 #ifndef DXTRACE_H
 #define DXTRACE_H

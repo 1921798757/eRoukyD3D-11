@@ -11,12 +11,13 @@ cbuffer ConstantBuffer : register(b0)
 
 struct VertexIn
 {
-    float3 posL : POSITION;
+    float3 posL : POSITION;         // L指的是Local 局部空间
     float4 color : COLOR;
 };
 
 struct VertexOut
 {
-    float4 posH : SV_POSITION;
-    float4 color : COLOR;
+    float4 posH : SV_POSITION;      // H指的是Homogeneous Clip 齐次裁剪空间
+    float4 color : COLOR;           // MVP之后就是齐次裁剪空间，NDC是在齐次裁剪空间基础上进行透视除法得到的标准化设备坐标，
+                                    // 屏幕空间是在NDC基础上进行视口变换得到的。
 };
