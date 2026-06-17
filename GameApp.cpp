@@ -117,7 +117,8 @@ void GameApp::UpdateScene(float dt)
             "Box",      // 立方体
             "Sphere",   // 球体
             "Cylinder", // 圆柱体
-            "Cone"      // 圆锥体
+            "Cone",     // 圆锥体
+            "Capsule"   // 胶囊体
         };
         // ImGui::Combo("标签", &变量, 选项数组, 选项数量)
         // 当用户选择了不同的项时返回 true
@@ -131,6 +132,7 @@ void GameApp::UpdateScene(float dt)
             case 1: meshData = Geometry::CreateSphere<VertexPosNormalColor>(); break;
             case 2: meshData = Geometry::CreateCylinder<VertexPosNormalColor>(); break;
             case 3: meshData = Geometry::CreateCone<VertexPosNormalColor>(); break;
+            case 4: meshData = Geometry::CreateCapsule<VertexPosNormalColor>(); break;
             }
             // 重置缓冲区，用新的网格数据替换旧的
             ResetMesh(meshData);
@@ -150,10 +152,32 @@ void GameApp::UpdateScene(float dt)
         // ColorEdit3 把它当 float[3] 处理，只读写偏移 0,1,2 的位置 = .x(R), .y(G), .z(B)
         // .w 分量不受影响（ambient.w/diffuse.w=1.0, specular.w=镜面强度由hlsl常量指定）
         // 这些修改直接写入 CPU 内存，然后在 UpdateScene() 末尾 Map+memcpy 上传到 GPU
+        //
+        // 【为什么 UI 拖动修改后可能会被"弹回"原值？】
+        // ColorEdit3 是直接通过指针写内存的，所以拖动时 UI 和内存都会变。
+        // 但如果拖动后 UI 又回到原来的值，说明在 ColorEdit3 执行之后，
+        // UpdateScene() 中还有别的代码又修改了 m_PSConstantBuffer.material 的同一字段。
+        // 常见的"回写"场景：
+        //   1. ColorEdit3 之后有一个 Combo("Light Type") 回调，其中做了
+        //      m_PSConstantBuffer.material = 某个预设值 → 覆盖了前面的修改
+        //   2. Combo("Mesh") 回调中调用了 ResetMesh，ResetMesh 内部重新设置了材质
+        //   3. 切换光源类型时，某个预设光源赋值给 PSConstantBuffer 时
+        //      顺带覆盖了 material 字段（但当前代码仅覆盖 dirLight/pointLight/spotLight）
+        //   4. 用户代码中某个 if 分支每帧都在重置材质（如 m_PSConstantBuffer.material.ambient = ...）
+        // 解决方法：找到 UpdateScene() 中在 ColorEdit3 之后修改 material 的那行代码，去掉它。
+        // 因为 ColorEdit3 已经在修改 m_PSConstantBuffer.material 的内存了，
+        // 后面不需要（也不应该）再对这个材质做任何赋值。
         ImGui::ColorEdit3("Ambient", &m_PSConstantBuffer.material.ambient.x);   // 环境光反射色 (RGB -> XMFLOAT4.x/.y/.z)
         ImGui::ColorEdit3("Diffuse", &m_PSConstantBuffer.material.diffuse.x);   // 漫反射色（物体的主要颜色）(RGB -> .x/.y/.z)
         ImGui::ColorEdit3("Specular", &m_PSConstantBuffer.material.specular.x); // 镜面高光色 (RGB -> .x/.y/.z)
         ImGui::PopID();
+        
+        //====================================
+        //作业4：调整镜面强度（观看镜面强度<1的现象）
+        //====================================
+        // 找到 ImGui 中设置材质颜色的区域，在后面添加：
+        ImGui::Text("Material Specular Power");
+        ImGui::SliderFloat("Specular Power", &m_PSConstantBuffer.material.specular.w, 0.1f, 128.0f);
 
         // ---- (3) 光源类型选择 ComboBox ----
         // curr_light_item 记录当前选择的光源类型索引
@@ -218,6 +242,68 @@ void GameApp::UpdateScene(float dt)
     }
     ImGui::End();           // 结束 ImGui 窗口
     ImGui::Render();        // 生成 ImGui 绘制命令（实际渲染在 DrawScene 中执行）
+
+
+    //=====================================================
+    // 作业部分：强制灯光颜色和材质颜色
+    //
+    // 【注意】这个代码块位于 ImGui::ColorEdit3 之后、GPU 上传之前，
+    // 所以它会每帧覆盖掉用户在 UI 中拖拽修改的值。
+    //
+    // 执行顺序：
+    //   1. ColorEdit3 修改了 m_PSConstantBuffer.material/dirLight/... 等字段
+    //      （用户拖拽色块 → 写内存，UI 看到的是用户刚拖的值）
+    //   2. ↓ 执行到这里，用下面的 XMFLOAT4(...) 重新赋值为固定值
+    //      （把 ColorEdit3 写进去的值又覆盖掉了）
+    //   3. ↓ Map+memcpy 上传到 GPU
+    //      （GPU 拿到的是被覆盖后的固定值，不是用户拖的值）
+    //
+    // 结果：用户拖拽后 UI 控件会立刻"弹回"到这些固定值，
+    //       因为每帧在 ColorEdit3 之后又被重新赋值为固定颜色。
+    //
+    // 如果想让 UI 拖拽生效，需要：
+    //   - 把这整个"作业部分"注释掉，或移到 ColorEdit3 之前，
+    //     或放到只在首次运行时执行的 InitResource() 中。
+    //======================================================
+    // 题目1：强制方向光为红光
+    /*
+    m_PSConstantBuffer.dirLight.ambient = XMFLOAT4(0.2f, 0.0f, 0.0f, 1.0f);
+    m_PSConstantBuffer.dirLight.diffuse = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
+    m_PSConstantBuffer.dirLight.specular = XMFLOAT4(0.5f, 0.0f, 0.0f, 1.0f);
+
+    // 题目1：强制点光源为绿光
+    m_PSConstantBuffer.pointLight.ambient = XMFLOAT4(0.0f, 0.3f, 0.0f, 1.0f);
+    m_PSConstantBuffer.pointLight.diffuse = XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f);
+    m_PSConstantBuffer.pointLight.specular = XMFLOAT4(0.0f, 0.5f, 0.0f, 1.0f);
+
+    // 题目1：强制聚光灯为蓝光
+    m_PSConstantBuffer.spotLight.ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    m_PSConstantBuffer.spotLight.diffuse = XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f);
+    m_PSConstantBuffer.spotLight.specular = XMFLOAT4(0.0f, 0.0f, 1.0f, 1.0f);
+
+    // 题目2：强制材质只反射红光
+    m_PSConstantBuffer.material.ambient = XMFLOAT4(0.5f, 0.0f, 0.0f, 1.0f);
+    m_PSConstantBuffer.material.diffuse = XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f);
+    m_PSConstantBuffer.material.specular = XMFLOAT4(0.5f, 0.0f, 0.0f, 5.0f);
+    */
+    //=====================================================
+    // 作业部分3：
+    // 
+    //=====================================================
+    // 鼠标滚轮控制聚光灯汇聚强度
+    short wheelDelta = GetMouseWheelDelta();
+    if (wheelDelta != 0)
+    {
+        // WHEEL_DELTA = 120，每滚动一格调整 2 个单位
+        float delta = (float)wheelDelta / WHEEL_DELTA * 2.0f;
+        m_PSConstantBuffer.spotLight.spot += delta;
+        
+        // 限制范围 2-512
+        if (m_PSConstantBuffer.spotLight.spot < 2.0f)
+            m_PSConstantBuffer.spotLight.spot = 2.0f;
+        if (m_PSConstantBuffer.spotLight.spot > 512.0f)
+            m_PSConstantBuffer.spotLight.spot = 512.0f;
+    }
 
     //=====================================================
     // 第三部分：将 CPU 数据上传到 GPU 常量缓冲区
