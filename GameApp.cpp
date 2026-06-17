@@ -143,12 +143,16 @@ void GameApp::UpdateScene(float dt)
         // 因为下面有多个 "Ambient"/"Diffuse"/"Specular" 控件（材质和光源共用同名控件），
         // 需要不同的 ID 来区分它们，否则 ImGui 会混淆
         ImGui::PushID(3);
-        // ColorEdit3 显示一个颜色编辑器（R, G, B 三个分量）
-        // 直接修改 m_PSConstantBuffer.material 中的对应字段
-        // 这些修改会在后续被上传到 GPU
-        ImGui::ColorEdit3("Ambient", &m_PSConstantBuffer.material.ambient.x);   // 环境光反射色
-        ImGui::ColorEdit3("Diffuse", &m_PSConstantBuffer.material.diffuse.x);   // 漫反射色（物体的主要颜色）
-        ImGui::ColorEdit3("Specular", &m_PSConstantBuffer.material.specular.x); // 镜面高光色
+        // ColorEdit3(label, float[3]) 显示一个 RGB 颜色编辑器（三个 float 输入框 + 色块）
+        // 第三个参数类型是 float*，指向 3 个连续 float 的起始地址
+        // Material::ambient/diffuse/specular 都是 XMFLOAT4（成员为 x,y,z,w）
+        // &xxx.x 就是 &xxx，即指向 XMFLOAT4 起始位置的 float*
+        // ColorEdit3 把它当 float[3] 处理，只读写偏移 0,1,2 的位置 = .x(R), .y(G), .z(B)
+        // .w 分量不受影响（ambient.w/diffuse.w=1.0, specular.w=镜面强度由hlsl常量指定）
+        // 这些修改直接写入 CPU 内存，然后在 UpdateScene() 末尾 Map+memcpy 上传到 GPU
+        ImGui::ColorEdit3("Ambient", &m_PSConstantBuffer.material.ambient.x);   // 环境光反射色 (RGB -> XMFLOAT4.x/.y/.z)
+        ImGui::ColorEdit3("Diffuse", &m_PSConstantBuffer.material.diffuse.x);   // 漫反射色（物体的主要颜色）(RGB -> .x/.y/.z)
+        ImGui::ColorEdit3("Specular", &m_PSConstantBuffer.material.specular.x); // 镜面高光色 (RGB -> .x/.y/.z)
         ImGui::PopID();
 
         // ---- (3) 光源类型选择 ComboBox ----
