@@ -327,6 +327,10 @@ LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         ((MINMAXINFO*)lParam)->ptMinTrackSize.y = 200;
         return 0;
 
+    case WM_MOUSEWHEEL:
+        // GET_WHEEL_DELTA_WPARAM 宏提取滚轮增量（每格120）
+        m_MouseWheelDelta += GET_WHEEL_DELTA_WPARAM(wParam);
+        return 0;
     }
 
     return DefWindowProc(hwnd, msg, wParam, lParam);

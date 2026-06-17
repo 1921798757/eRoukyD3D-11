@@ -52,6 +52,12 @@ namespace Geometry
     template<class VertexType = VertexPosNormalTex, class IndexType = DWORD>
     MeshData<VertexType, IndexType> CreateCone(float radius = 1.0f, float height = 2.0f, UINT slices = 20,
         const DirectX::XMFLOAT4& color = { 1.0f, 1.0f, 1.0f, 1.0f });
+    
+        // 创建胶囊体网格数据（上下半球 + 柱体/锥台）
+    template<class VertexType = VertexPosNormalTex, class IndexType = DWORD>
+    MeshData<VertexType, IndexType> CreateCapsule(float topRadius = 0.5f, float bottomRadius = 0.5f,
+        float height = 2.0f, UINT slices = 20, UINT topLevels = 10, UINT bottomLevels = 10,
+        const DirectX::XMFLOAT4& color = { 1.0f, 1.0f, 1.0f, 1.0f });
 
     // 创建只有圆锥体侧面网格数据，slices越大，精度越高。
     template<class VertexType = VertexPosNormalTex, class IndexType = DWORD>
@@ -440,6 +446,7 @@ namespace Geometry
         return meshData;
     }
 
+    
     // ----------------------------------------------------------
     // CreateCylinderNoCap — 创建圆柱体侧面网格（无顶盖和底盖）
     // 参数：
@@ -560,6 +567,219 @@ namespace Geometry
             meshData.indexVec[iIndex++] = offset + slices;
             meshData.indexVec[iIndex++] = offset + i % slices;
             meshData.indexVec[iIndex++] = offset + (i + 1) % slices;
+        }
+
+        return meshData;
+    }
+
+
+    // ----------------------------------------------------------
+    // CreateCapsule — 创建胶囊体网格（上下半球 + 柱体/锥台）
+    // 参数：
+    //   topRadius    : 上半球半径
+    //   bottomRadius : 下半球半径
+    //   height       : 柱体部分高度（不含半球）
+    //   slices       : 经度方向切片数（圆周分割）
+    //   topLevels    : 上半球纬度层级数
+    //   bottomLevels : 下半球纬度层级数
+    //   color        : 顶点颜色
+    // 说明：
+    //   胶囊体由三部分组成：上半球（topLevels层）、柱体（height高度）、下半球（bottomLevels层）。
+    //   当 topRadius != bottomRadius 时，中间连接部分为锥台（frustum）。
+    //   在半球与柱体交界处复制顶点，以保证法线在棱线处正确断开。
+    //   纹理坐标 v 轴按三部分的高度比例分配：0(北极) → 1(南极)。
+    //   顶点包含位置、法线、切线、纹理坐标（由 VertexType 决定实际输出哪些属性）。
+    // ----------------------------------------------------------
+    template<class VertexType, class IndexType>
+    inline MeshData<VertexType, IndexType> CreateCapsule(float topRadius, float bottomRadius,
+        float height, UINT slices, UINT topLevels, UINT bottomLevels, const DirectX::XMFLOAT4& color)
+    {
+        using namespace DirectX;
+
+        MeshData<VertexType, IndexType> meshData;
+
+        float h2 = height / 2.0f;
+        float per_theta = XM_2PI / slices;
+        float per_phi_top = XM_PIDIV2 / topLevels;
+        float per_phi_bot = XM_PIDIV2 / bottomLevels;
+
+        // 纹理坐标 v 轴按三部分高度比例分配
+        float totalH = topRadius + height + bottomRadius;
+        float vCylBase = topRadius / totalH;           // 柱体顶部 v 值
+        float vBotBase = (topRadius + height) / totalH; // 柱体底部 v 值
+
+        // 柱体/锥台部分法线计算参数
+        float dr = bottomRadius - topRadius;
+        float slantLen = sqrtf(height * height + dr * dr);
+
+        // 顶点数 = 北极(1) + 上半球topLevels环 + 柱体2环 + 下半球bottomLevels环 + 南极(1)
+        UINT vertexCount = 2 + (topLevels + bottomLevels + 2) * (slices + 1);
+        // 索引数 = 6 * (topLevels + bottomLevels) * slices
+        UINT indexCount = 6 * (topLevels + bottomLevels) * slices;
+        meshData.vertexVec.resize(vertexCount);
+        meshData.indexVec.resize(indexCount);
+
+        Internal::VertexData vertexData;
+        UINT vIndex = 0, iIndex = 0;
+
+        // ===================== 上半球 =====================
+
+        // 北极顶点
+        vertexData = { XMFLOAT3(0.0f, h2 + topRadius, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f),
+            XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f), color, XMFLOAT2(0.0f, 0.0f) };
+        Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
+
+        // 上半球纬度环 i = 1..topLevels（phi 从 0 到 π/2）
+        for (UINT i = 1; i <= topLevels; ++i)
+        {
+            float phi = per_phi_top * i;
+            float sinPhi = sinf(phi), cosPhi = cosf(phi);
+            float v = vCylBase * (float)i / topLevels;
+
+            for (UINT j = 0; j <= slices; ++j)
+            {
+                float theta = per_theta * j;
+                float sinT = sinf(theta), cosT = cosf(theta);
+                float x = topRadius * sinPhi * cosT;
+                float y = h2 + topRadius * cosPhi;
+                float z = topRadius * sinPhi * sinT;
+
+                // 法线 = (pos - 球心) 归一化，球心在 (0, h2, 0)
+                XMFLOAT3 normal;
+                XMStoreFloat3(&normal, XMVector3Normalize(XMVectorSet(x, y - h2, z, 0.0f)));
+
+                vertexData = { XMFLOAT3(x, y, z), normal, XMFLOAT4(-sinT, 0.0f, cosT, 1.0f),
+                    color, XMFLOAT2(theta / XM_2PI, v) };
+                Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
+            }
+        }
+
+        // ===================== 柱体/锥台 =====================
+
+        // 柱体顶环 (y = +h2, 半径 = topRadius)
+        for (UINT j = 0; j <= slices; ++j)
+        {
+            float theta = per_theta * j;
+            float sinT = sinf(theta), cosT = cosf(theta);
+            // 锥台法线：考虑上下半径差异导致的倾斜
+            XMFLOAT3 normal(height * cosT / slantLen, dr / slantLen, height * sinT / slantLen);
+            vertexData = { XMFLOAT3(topRadius * cosT, h2, topRadius * sinT), normal,
+                XMFLOAT4(-sinT, 0.0f, cosT, 1.0f), color, XMFLOAT2(theta / XM_2PI, vCylBase) };
+            Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
+        }
+
+        // 柱体底环 (y = -h2, 半径 = bottomRadius)
+        for (UINT j = 0; j <= slices; ++j)
+        {
+            float theta = per_theta * j;
+            float sinT = sinf(theta), cosT = cosf(theta);
+            XMFLOAT3 normal(height * cosT / slantLen, dr / slantLen, height * sinT / slantLen);
+            vertexData = { XMFLOAT3(bottomRadius * cosT, -h2, bottomRadius * sinT), normal,
+                XMFLOAT4(-sinT, 0.0f, cosT, 1.0f), color, XMFLOAT2(theta / XM_2PI, vBotBase) };
+            Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
+        }
+
+        // ===================== 下半球 =====================
+
+        // 下半球纬度环 i = 0..bottomLevels-1（phi 从 π/2 到接近 π）
+        // Ring 0 为下半球赤道（与柱体底环位置相同但法线不同），Ring bottomLevels-1 为最后一道中间环
+        for (UINT i = 0; i < bottomLevels; ++i)
+        {
+            float phi = XM_PIDIV2 + per_phi_bot * i;
+            float sinPhi = sinf(phi), cosPhi = cosf(phi);
+            float v = vBotBase + (1.0f - vBotBase) * (float)i / bottomLevels;
+
+            for (UINT j = 0; j <= slices; ++j)
+            {
+                float theta = per_theta * j;
+                float sinT = sinf(theta), cosT = cosf(theta);
+                float x = bottomRadius * sinPhi * cosT;
+                float y = -h2 + bottomRadius * cosPhi;
+                float z = bottomRadius * sinPhi * sinT;
+
+                // 法线 = (pos - 球心) 归一化，球心在 (0, -h2, 0)
+                XMFLOAT3 normal;
+                XMStoreFloat3(&normal, XMVector3Normalize(XMVectorSet(x, y + h2, z, 0.0f)));
+
+                vertexData = { XMFLOAT3(x, y, z), normal, XMFLOAT4(-sinT, 0.0f, cosT, 1.0f),
+                    color, XMFLOAT2(theta / XM_2PI, v) };
+                Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
+            }
+        }
+
+        // 南极顶点
+        vertexData = { XMFLOAT3(0.0f, -h2 - bottomRadius, 0.0f), XMFLOAT3(0.0f, -1.0f, 0.0f),
+            XMFLOAT4(-1.0f, 0.0f, 0.0f, 1.0f), color, XMFLOAT2(0.0f, 1.0f) };
+        Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
+
+        // ===================== 索引生成 =====================
+
+        // --- 上半球顶帽 (北极 → 环1) ---
+        for (UINT j = 0; j < slices; ++j)
+        {
+            meshData.indexVec[iIndex++] = 0;
+            meshData.indexVec[iIndex++] = 1 + j + 1;
+            meshData.indexVec[iIndex++] = 1 + j;
+        }
+
+        // --- 上半球中间带 (环i → 环i+1), i = 1..topLevels-1 ---
+        for (UINT i = 1; i < topLevels; ++i)
+        {
+            UINT ringCurr = 1 + (i - 1) * (slices + 1);
+            UINT ringNext = 1 + i * (slices + 1);
+            for (UINT j = 0; j < slices; ++j)
+            {
+                meshData.indexVec[iIndex++] = ringCurr + j;
+                meshData.indexVec[iIndex++] = ringCurr + j + 1;
+                meshData.indexVec[iIndex++] = ringNext + j + 1;
+
+                meshData.indexVec[iIndex++] = ringCurr + j;
+                meshData.indexVec[iIndex++] = ringNext + j + 1;
+                meshData.indexVec[iIndex++] = ringNext + j;
+            }
+        }
+
+        // --- 柱体/锥台 (顶环 → 底环) ---
+        UINT cylTopStart = 1 + topLevels * (slices + 1);
+        UINT cylBotStart = cylTopStart + (slices + 1);
+        for (UINT j = 0; j < slices; ++j)
+        {
+            meshData.indexVec[iIndex++] = cylTopStart + j;
+            meshData.indexVec[iIndex++] = cylTopStart + j + 1;
+            meshData.indexVec[iIndex++] = cylBotStart + j + 1;
+
+            meshData.indexVec[iIndex++] = cylTopStart + j;
+            meshData.indexVec[iIndex++] = cylBotStart + j + 1;
+            meshData.indexVec[iIndex++] = cylBotStart + j;
+        }
+
+        // --- 下半球中间带 (环i → 环i+1), i = 0..bottomLevels-2 ---
+        // 下半球环 0（赤道）起始索引
+        UINT botEquatorStart = cylBotStart + (slices + 1);
+        for (UINT i = 0; i + 1 < bottomLevels; ++i)
+        {
+            UINT ringCurr = botEquatorStart + i * (slices + 1);
+            UINT ringNext = botEquatorStart + (i + 1) * (slices + 1);
+            for (UINT j = 0; j < slices; ++j)
+            {
+                meshData.indexVec[iIndex++] = ringCurr + j;
+                meshData.indexVec[iIndex++] = ringCurr + j + 1;
+                meshData.indexVec[iIndex++] = ringNext + j + 1;
+
+                meshData.indexVec[iIndex++] = ringCurr + j;
+                meshData.indexVec[iIndex++] = ringNext + j + 1;
+                meshData.indexVec[iIndex++] = ringNext + j;
+            }
+        }
+
+        // --- 下半球底帽 (最后一环 → 南极) ---
+        UINT southPole = vIndex - 1;
+        UINT lastRingStart = botEquatorStart + (bottomLevels - 1) * (slices + 1);
+        for (UINT j = 0; j < slices; ++j)
+        {
+            meshData.indexVec[iIndex++] = lastRingStart + j;
+            meshData.indexVec[iIndex++] = lastRingStart + j + 1;
+            meshData.indexVec[iIndex++] = southPole;
         }
 
         return meshData;
