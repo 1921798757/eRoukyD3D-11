@@ -22,7 +22,8 @@ GameApp::GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWi
     m_DirLight(),               // 方向光初始化为零
     m_PointLight(),             // 点光源初始化为零
     m_SpotLight(),              // 聚光灯初始化为零
-    m_IsWireframeMode(false)    // 默认不开启线框模式
+    m_FillMode(0),              // 默认 Solid 模式
+    m_CullMode(1)               // 默认 Back Cull
 {
 }
 
@@ -231,14 +232,21 @@ void GameApp::UpdateScene(float dt)
         }
         ImGui::PopID();
 
-        // ---- (5) 线框模式切换 ----
-        // Checkbox 复选框，当状态改变时切换光栅化状态
-        if (ImGui::Checkbox("WireFrame Mode", &m_IsWireframeMode))
-        {
-            // 如果开启线框模式：使用线框光栅化状态
-            // 如果关闭线框模式：用 nullptr 恢复默认（实体）模式
-            m_pd3dImmediateContext->RSSetState(m_IsWireframeMode ? m_pRSWireframe.Get() : nullptr);
-        }
+        // ---- (5) 渲染模式控制 ----
+        ImGui::Text("Fill Mode:");
+        ImGui::RadioButton("Solid", &m_FillMode, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("Wireframe", &m_FillMode, 1);
+
+        ImGui::Text("Cull Mode:");
+        ImGui::RadioButton("None", &m_CullMode, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("Back", &m_CullMode, 1);
+        ImGui::SameLine();
+        ImGui::RadioButton("Front", &m_CullMode, 2);
+
+        // 设置光栅化状态
+        m_pd3dImmediateContext->RSSetState(m_pRS[m_FillMode * 3 + m_CullMode].Get());
     }
     ImGui::End();           // 结束 ImGui 窗口
     ImGui::Render();        // 生成 ImGui 绘制命令（实际渲染在 DrawScene 中执行）
@@ -506,15 +514,38 @@ bool GameApp::InitResource()
     m_pd3dImmediateContext->Unmap(m_pConstantBuffers[1].Get(), 0);
 
     //=====================================================
-    // 第6步：创建光栅化状态（用于线框模式）
+    // 第6步：创建 6 种光栅化状态组合
     //=====================================================
     D3D11_RASTERIZER_DESC rasterizerDesc;
     ZeroMemory(&rasterizerDesc, sizeof(rasterizerDesc));
-    rasterizerDesc.FillMode = D3D11_FILL_WIREFRAME;     // 线框填充模式
-    rasterizerDesc.CullMode = D3D11_CULL_NONE;           // 不剔除任何面（线框模式不需要剔除）
     rasterizerDesc.FrontCounterClockwise = false;        // 逆时针为正面
     rasterizerDesc.DepthClipEnable = true;
-    HR(m_pd3dDevice->CreateRasterizerState(&rasterizerDesc, m_pRSWireframe.GetAddressOf()));
+
+    // [0] Solid + None
+    rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+    rasterizerDesc.CullMode = D3D11_CULL_NONE;
+    HR(m_pd3dDevice->CreateRasterizerState(&rasterizerDesc, m_pRS[0].GetAddressOf()));
+
+    // [1] Solid + Back
+    rasterizerDesc.CullMode = D3D11_CULL_BACK;
+    HR(m_pd3dDevice->CreateRasterizerState(&rasterizerDesc, m_pRS[1].GetAddressOf()));
+
+    // [2] Solid + Front
+    rasterizerDesc.CullMode = D3D11_CULL_FRONT;
+    HR(m_pd3dDevice->CreateRasterizerState(&rasterizerDesc, m_pRS[2].GetAddressOf()));
+
+    // [3] Wireframe + None
+    rasterizerDesc.FillMode = D3D11_FILL_WIREFRAME;
+    rasterizerDesc.CullMode = D3D11_CULL_NONE;
+    HR(m_pd3dDevice->CreateRasterizerState(&rasterizerDesc, m_pRS[3].GetAddressOf()));
+
+    // [4] Wireframe + Back
+    rasterizerDesc.CullMode = D3D11_CULL_BACK;
+    HR(m_pd3dDevice->CreateRasterizerState(&rasterizerDesc, m_pRS[4].GetAddressOf()));
+
+    // [5] Wireframe + Front
+    rasterizerDesc.CullMode = D3D11_CULL_FRONT;
+    HR(m_pd3dDevice->CreateRasterizerState(&rasterizerDesc, m_pRS[5].GetAddressOf()));
 
     //=====================================================
     // 第7步：将资源绑定到渲染管线

@@ -87,7 +87,9 @@ private:
     SpotLight m_SpotLight;						    // 预设的聚光灯
 
     // ---- 渲染状态 ----
-    ComPtr<ID3D11RasterizerState> m_pRSWireframe;	// 线框模式的光栅化状态
+    ComPtr<ID3D11RasterizerState> m_pRS[6];   // 6种组合: [FillMode*3 + CullMode]
+    int m_FillMode;                            // 0=Solid, 1=Wireframe
+    int m_CullMode;                            // 0=None, 1=Back, 2=Front
     bool m_IsWireframeMode;							// 当前是否为线框模式（通过ImGui切换）
     
 };
