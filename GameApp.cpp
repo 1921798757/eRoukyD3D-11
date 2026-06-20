@@ -23,8 +23,7 @@ GameApp::GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWi
     m_PointLight(),             // 点光源初始化为零
     m_SpotLight(),              // 聚光灯初始化为零
     m_FillMode(0),              // 默认 Solid 模式
-    m_CullMode(1),              // 默认 Back Cull
-    m_ShowTriangleEdges(false)  // 默认不叠加三角形边界
+    m_CullMode(1)               // 默认 Back Cull
 {
 }
 
@@ -238,6 +237,8 @@ void GameApp::UpdateScene(float dt)
         ImGui::RadioButton("Solid", &m_FillMode, 0);
         ImGui::SameLine();
         ImGui::RadioButton("Wireframe", &m_FillMode, 1);
+        ImGui::SameLine();
+        ImGui::RadioButton("Both", &m_FillMode, 2);
 
         ImGui::Text("Cull Mode:");
         ImGui::RadioButton("None", &m_CullMode, 0);
@@ -245,9 +246,6 @@ void GameApp::UpdateScene(float dt)
         ImGui::RadioButton("Back", &m_CullMode, 1);
         ImGui::SameLine();
         ImGui::RadioButton("Front", &m_CullMode, 2);
-
-        // 独立checkbox：是否叠加三角形边界线
-        ImGui::Checkbox("Show Triangle Edges", &m_ShowTriangleEdges);
     }
     ImGui::End();           // 结束 ImGui 窗口
     ImGui::Render();        // 生成 ImGui 绘制命令（实际渲染在 DrawScene 中执行）
@@ -351,26 +349,31 @@ void GameApp::DrawScene()
     m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
     
     // 根据 ImGui 的 FillMode 选择绘制方式
+    // 0=Solid: 只画实体立方体
+    // 1=Wireframe: 只画线框（保留原有行为）
+    // 2=Both: 先画实体，再叠加白色三角形边界线
     if (m_FillMode == 0)
     {
-        // Solid 模式：画实体立方体
         m_pd3dImmediateContext->RSSetState(m_pRS[0 * 3 + m_CullMode].Get());
+        m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
+        m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
+    else if (m_FillMode == 1)
+    {
+        // 原有 Wireframe 模式：用光照像素着色器画线框
+        m_pd3dImmediateContext->RSSetState(m_pRS[1 * 3 + m_CullMode].Get());
         m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
         m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
     }
     else
     {
-        // Wireframe 模式：画三角形线框
-        m_pd3dImmediateContext->RSSetState(m_pRS[1 * 3 + m_CullMode].Get());
+        // Both 模式：先画实体，再叠加白色三角形边界
+        // 第1遍：Solid 填充
+        m_pd3dImmediateContext->RSSetState(m_pRS[0 * 3 + m_CullMode].Get());
         m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
         m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
-    }
 
-    // 独立功能：叠加三角形边界线（不影响 Solid/Wireframe 切换）
-    if (m_ShowTriangleEdges)
-    {
-        // 使用 LESS_EQUAL 深度比较，让相同深度的边线也能通过深度测试
-        // 使用固定白色像素着色器，让边线在实体/线框上清晰可见
+        // 第2遍：Wireframe 叠加白色三角形边界线
         m_pd3dImmediateContext->RSSetState(m_pRS[1 * 3 + m_CullMode].Get());
         m_pd3dImmediateContext->OMSetDepthStencilState(m_pDSEqual.Get(), 0);
         m_pd3dImmediateContext->PSSetShader(m_pWireframePS.Get(), nullptr, 0);

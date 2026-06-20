@@ -88,11 +88,10 @@ private:
     SpotLight m_SpotLight;						    // 预设的聚光灯
 
     // ---- 渲染状态 ----
-    ComPtr<ID3D11RasterizerState> m_pRS[6];   // 6种组合: [FillMode*3 + CullMode]
+    ComPtr<ID3D11RasterizerState> m_pRS[6];   // 6种组合: [FillMode*3 + CullMode], FillMode: 0=Solid, 1=Wireframe
     ComPtr<ID3D11DepthStencilState> m_pDSEqual;  // 深度比较 LESS_EQUAL（用于第二遍wireframe叠加）
-    int m_FillMode;                            // 0=Solid, 1=Wireframe
+    int m_FillMode;                            // 0=Solid, 1=Wireframe, 2=Both
     int m_CullMode;                            // 0=None, 1=Back, 2=Front
-    bool m_ShowTriangleEdges;						// 是否叠加三角形边界线（独立checkbox控制）
     
 };
 
