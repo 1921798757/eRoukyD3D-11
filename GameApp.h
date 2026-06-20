@@ -76,6 +76,7 @@ private:
     // ---- 着色器 ----
     ComPtr<ID3D11VertexShader> m_pVertexShader;	    // 顶点着色器（处理顶点变换）
     ComPtr<ID3D11PixelShader> m_pPixelShader;		// 像素着色器（计算像素颜色）
+    ComPtr<ID3D11PixelShader> m_pWireframePS;		// 线框像素着色器（输出固定白色，用于叠加三角形边界）
     
     // ---- 常量缓冲区（CPU端副本） ----
     VSConstantBuffer m_VSConstantBuffer;			// CPU端的VS常量数据，每帧修改后上传到GPU
@@ -87,10 +88,10 @@ private:
     SpotLight m_SpotLight;						    // 预设的聚光灯
 
     // ---- 渲染状态 ----
-    ComPtr<ID3D11RasterizerState> m_pRS[6];   // 6种组合: [FillMode*3 + CullMode]
-    int m_FillMode;                            // 0=Solid, 1=Wireframe
+    ComPtr<ID3D11RasterizerState> m_pRS[6];   // 6种组合: [FillMode*3 + CullMode], FillMode: 0=Solid, 1=Wireframe
+    ComPtr<ID3D11DepthStencilState> m_pDSEqual;  // 深度比较 LESS_EQUAL（用于第二遍wireframe叠加）
+    int m_FillMode;                            // 0=Solid, 1=Wireframe, 2=Both
     int m_CullMode;                            // 0=None, 1=Back, 2=Front
-    bool m_IsWireframeMode;							// 当前是否为线框模式（通过ImGui切换）
     
 };
 
