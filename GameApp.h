@@ -92,7 +92,7 @@ private:
     ComPtr<ID3D11DepthStencilState> m_pDSEqual;  // 深度比较 LESS_EQUAL（用于第二遍wireframe叠加）
     int m_FillMode;                            // 0=Solid, 1=Wireframe
     int m_CullMode;                            // 0=None, 1=Back, 2=Front
-    bool m_IsWireframeMode;							// 当前是否为线框模式（通过ImGui切换）
+    bool m_ShowTriangleEdges;						// 是否叠加三角形边界线（独立checkbox控制）
     
 };
 

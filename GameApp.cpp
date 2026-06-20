@@ -23,7 +23,8 @@ GameApp::GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWi
     m_PointLight(),             // 点光源初始化为零
     m_SpotLight(),              // 聚光灯初始化为零
     m_FillMode(0),              // 默认 Solid 模式
-    m_CullMode(1)               // 默认 Back Cull
+    m_CullMode(1),              // 默认 Back Cull
+    m_ShowTriangleEdges(false)  // 默认不叠加三角形边界
 {
 }
 
@@ -245,8 +246,8 @@ void GameApp::UpdateScene(float dt)
         ImGui::SameLine();
         ImGui::RadioButton("Front", &m_CullMode, 2);
 
-        // 设置光栅化状态
-        m_pd3dImmediateContext->RSSetState(m_pRS[m_FillMode * 3 + m_CullMode].Get());
+        // 独立checkbox：是否叠加三角形边界线
+        ImGui::Checkbox("Show Triangle Edges", &m_ShowTriangleEdges);
     }
     ImGui::End();           // 结束 ImGui 窗口
     ImGui::Render();        // 生成 ImGui 绘制命令（实际渲染在 DrawScene 中执行）
@@ -352,21 +353,24 @@ void GameApp::DrawScene()
     // 根据 ImGui 的 FillMode 选择绘制方式
     if (m_FillMode == 0)
     {
-        // Solid 模式：只画实体立方体
+        // Solid 模式：画实体立方体
         m_pd3dImmediateContext->RSSetState(m_pRS[0 * 3 + m_CullMode].Get());
         m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
         m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
     }
     else
     {
-        // Wireframe 模式：同时画出立方体和三角形边界
-        // 第1遍：Solid 填充，绘制实体立方体表面（使用光照像素着色器）
-        m_pd3dImmediateContext->RSSetState(m_pRS[0 * 3 + m_CullMode].Get());
+        // Wireframe 模式：画三角形线框
+        m_pd3dImmediateContext->RSSetState(m_pRS[1 * 3 + m_CullMode].Get());
         m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
         m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
 
-        // 第2遍：Wireframe 填充，叠加三角形边界线（使用固定白色像素着色器）
+    // 独立功能：叠加三角形边界线（不影响 Solid/Wireframe 切换）
+    if (m_ShowTriangleEdges)
+    {
         // 使用 LESS_EQUAL 深度比较，让相同深度的边线也能通过深度测试
+        // 使用固定白色像素着色器，让边线在实体/线框上清晰可见
         m_pd3dImmediateContext->RSSetState(m_pRS[1 * 3 + m_CullMode].Get());
         m_pd3dImmediateContext->OMSetDepthStencilState(m_pDSEqual.Get(), 0);
         m_pd3dImmediateContext->PSSetShader(m_pWireframePS.Get(), nullptr, 0);
