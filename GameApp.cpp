@@ -237,6 +237,8 @@ void GameApp::UpdateScene(float dt)
         ImGui::RadioButton("Solid", &m_FillMode, 0);
         ImGui::SameLine();
         ImGui::RadioButton("Wireframe", &m_FillMode, 1);
+        ImGui::SameLine();
+        ImGui::RadioButton("Both", &m_FillMode, 2);
 
         ImGui::Text("Cull Mode:");
         ImGui::RadioButton("None", &m_CullMode, 0);
@@ -244,9 +246,6 @@ void GameApp::UpdateScene(float dt)
         ImGui::RadioButton("Back", &m_CullMode, 1);
         ImGui::SameLine();
         ImGui::RadioButton("Front", &m_CullMode, 2);
-
-        // 设置光栅化状态
-        m_pd3dImmediateContext->RSSetState(m_pRS[m_FillMode * 3 + m_CullMode].Get());
     }
     ImGui::End();           // 结束 ImGui 窗口
     ImGui::Render();        // 生成 ImGui 绘制命令（实际渲染在 DrawScene 中执行）
@@ -349,9 +348,37 @@ void GameApp::DrawScene()
     // 清除深度/模板缓冲区（1.0f表示最远，这样所有像素都会通过深度测试）
     m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
     
-    // 绘制几何模型：使用索引绘制（比顶点绘制更节省内存）
-    // 参数：索引数量, 起始索引偏移, 顶点偏移
-    m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    // 根据 ImGui 的 FillMode 选择绘制方式
+    // 0=Solid: 只画实体立方体
+    // 1=Wireframe: 只画线框（保留原有行为）
+    // 2=Both: 先画实体，再叠加白色三角形边界线
+    if (m_FillMode == 0)
+    {
+        m_pd3dImmediateContext->RSSetState(m_pRS[0 * 3 + m_CullMode].Get());
+        m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
+        m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
+    else if (m_FillMode == 1)
+    {
+        // 原有 Wireframe 模式：用光照像素着色器画线框
+        m_pd3dImmediateContext->RSSetState(m_pRS[1 * 3 + m_CullMode].Get());
+        m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
+        m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
+    else
+    {
+        // Both 模式：先画实体，再叠加白色三角形边界
+        // 第1遍：Solid 填充
+        m_pd3dImmediateContext->RSSetState(m_pRS[0 * 3 + m_CullMode].Get());
+        m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
+        m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+
+        // 第2遍：Wireframe 叠加白色三角形边界线
+        m_pd3dImmediateContext->RSSetState(m_pRS[1 * 3 + m_CullMode].Get());
+        m_pd3dImmediateContext->OMSetDepthStencilState(m_pDSEqual.Get(), 0);
+        m_pd3dImmediateContext->PSSetShader(m_pWireframePS.Get(), nullptr, 0);
+        m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
 
     // 渲染 ImGui 的绘制命令（在 UpdateScene 中已经生成了绘制数据）
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -391,6 +418,10 @@ bool GameApp::InitEffect()
     // "ps_5_0" 表示 Pixel Shader 5.0
     HR(CreateShaderFromFile(L"HLSL\\Light_PS.cso", L"HLSL\\Light_PS.hlsl", "PS", "ps_5_0", blob.ReleaseAndGetAddressOf()));
     HR(m_pd3dDevice->CreatePixelShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, m_pPixelShader.GetAddressOf()));
+
+    // ---- 创建线框像素着色器（输出固定白色，用于叠加三角形边界） ----
+    HR(CreateShaderFromFile(L"HLSL\\Wireframe_PS.cso", L"HLSL\\Wireframe_PS.hlsl", "PS", "ps_5_0", blob.ReleaseAndGetAddressOf()));
+    HR(m_pd3dDevice->CreatePixelShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, m_pWireframePS.GetAddressOf()));
 
     return true;
 }
@@ -546,6 +577,18 @@ bool GameApp::InitResource()
     // [5] Wireframe + Front
     rasterizerDesc.CullMode = D3D11_CULL_FRONT;
     HR(m_pd3dDevice->CreateRasterizerState(&rasterizerDesc, m_pRS[5].GetAddressOf()));
+
+    //=====================================================
+    // 第6.5步：创建深度模板状态（LESS_EQUAL，用于第二遍wireframe叠加）
+    // 默认深度比较是 LESS（严格小于），第二遍 wireframe 的边线深度与第一遍 solid 相同，
+    // 会被深度测试剔除。改用 LESS_EQUAL 让相同深度的像素也能通过。
+    //=====================================================
+    D3D11_DEPTH_STENCIL_DESC dsDesc;
+    ZeroMemory(&dsDesc, sizeof(dsDesc));
+    dsDesc.DepthEnable = true;
+    dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+    dsDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;  // 小于等于都通过
+    HR(m_pd3dDevice->CreateDepthStencilState(&dsDesc, m_pDSEqual.GetAddressOf()));
 
     //=====================================================
     // 第7步：将资源绑定到渲染管线
