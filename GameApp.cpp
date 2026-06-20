@@ -349,9 +349,29 @@ void GameApp::DrawScene()
     // 清除深度/模板缓冲区（1.0f表示最远，这样所有像素都会通过深度测试）
     m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
     
-    // 绘制几何模型：使用索引绘制（比顶点绘制更节省内存）
-    // 参数：索引数量, 起始索引偏移, 顶点偏移
-    m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    // 根据 ImGui 的 FillMode 选择绘制方式
+    if (m_FillMode == 0)
+    {
+        // Solid 模式：只画实体立方体
+        m_pd3dImmediateContext->RSSetState(m_pRS[0 * 3 + m_CullMode].Get());
+        m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
+        m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
+    else
+    {
+        // Wireframe 模式：同时画出立方体和三角形边界
+        // 第1遍：Solid 填充，绘制实体立方体表面（使用光照像素着色器）
+        m_pd3dImmediateContext->RSSetState(m_pRS[0 * 3 + m_CullMode].Get());
+        m_pd3dImmediateContext->PSSetShader(m_pPixelShader.Get(), nullptr, 0);
+        m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+
+        // 第2遍：Wireframe 填充，叠加三角形边界线（使用固定白色像素着色器）
+        // 使用 LESS_EQUAL 深度比较，让相同深度的边线也能通过深度测试
+        m_pd3dImmediateContext->RSSetState(m_pRS[1 * 3 + m_CullMode].Get());
+        m_pd3dImmediateContext->OMSetDepthStencilState(m_pDSEqual.Get(), 0);
+        m_pd3dImmediateContext->PSSetShader(m_pWireframePS.Get(), nullptr, 0);
+        m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
 
     // 渲染 ImGui 的绘制命令（在 UpdateScene 中已经生成了绘制数据）
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -391,6 +411,10 @@ bool GameApp::InitEffect()
     // "ps_5_0" 表示 Pixel Shader 5.0
     HR(CreateShaderFromFile(L"HLSL\\Light_PS.cso", L"HLSL\\Light_PS.hlsl", "PS", "ps_5_0", blob.ReleaseAndGetAddressOf()));
     HR(m_pd3dDevice->CreatePixelShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, m_pPixelShader.GetAddressOf()));
+
+    // ---- 创建线框像素着色器（输出固定白色，用于叠加三角形边界） ----
+    HR(CreateShaderFromFile(L"HLSL\\Wireframe_PS.cso", L"HLSL\\Wireframe_PS.hlsl", "PS", "ps_5_0", blob.ReleaseAndGetAddressOf()));
+    HR(m_pd3dDevice->CreatePixelShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, m_pWireframePS.GetAddressOf()));
 
     return true;
 }
@@ -546,6 +570,18 @@ bool GameApp::InitResource()
     // [5] Wireframe + Front
     rasterizerDesc.CullMode = D3D11_CULL_FRONT;
     HR(m_pd3dDevice->CreateRasterizerState(&rasterizerDesc, m_pRS[5].GetAddressOf()));
+
+    //=====================================================
+    // 第6.5步：创建深度模板状态（LESS_EQUAL，用于第二遍wireframe叠加）
+    // 默认深度比较是 LESS（严格小于），第二遍 wireframe 的边线深度与第一遍 solid 相同，
+    // 会被深度测试剔除。改用 LESS_EQUAL 让相同深度的像素也能通过。
+    //=====================================================
+    D3D11_DEPTH_STENCIL_DESC dsDesc;
+    ZeroMemory(&dsDesc, sizeof(dsDesc));
+    dsDesc.DepthEnable = true;
+    dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+    dsDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;  // 小于等于都通过
+    HR(m_pd3dDevice->CreateDepthStencilState(&dsDesc, m_pDSEqual.GetAddressOf()));
 
     //=====================================================
     // 第7步：将资源绑定到渲染管线
