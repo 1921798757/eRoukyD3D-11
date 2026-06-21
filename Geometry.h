@@ -52,7 +52,7 @@ namespace Geometry
     template<class VertexType = VertexPosNormalTex, class IndexType = DWORD>
     MeshData<VertexType, IndexType> CreateCone(float radius = 1.0f, float height = 2.0f, UINT slices = 20,
         const DirectX::XMFLOAT4& color = { 1.0f, 1.0f, 1.0f, 1.0f });
-    
+
         // 创建胶囊体网格数据（上下半球 + 柱体/锥台）
     template<class VertexType = VertexPosNormalTex, class IndexType = DWORD>
     MeshData<VertexType, IndexType> CreateCapsule(float topRadius = 0.5f, float bottomRadius = 0.5f,

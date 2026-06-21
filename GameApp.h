@@ -40,14 +40,18 @@ public:
     //------------------------------------------------------
     struct PSConstantBuffer
     {
-        DirectionalLight dirLight;    // 方向光（平行光）参数
-        PointLight pointLight;        // 点光源参数
-        SpotLight spotLight;          // 聚光灯参数
-        Material material;            // 物体材质属性
-        DirectX::XMFLOAT4 eyePos;     // 摄像机位置（xyz），用于计算镜面高光
+        DirectionalLight dirLight[10];
+        PointLight pointLight[10];
+        SpotLight spotLight[10];
+        Material material;
+        int numDirLight;
+        int numPointLight;
+        int numSpotLight;
+        float pad;		// 打包保证16字节对齐
+        DirectX::XMFLOAT4 eyePos;
     };
 
-
+    enum class ShowMode { WoodCrate, FireAnim };
 
 public:
     GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWidth, int initHeight);
@@ -62,37 +66,31 @@ public:
 private:
     bool InitEffect();      // 创建/加载顶点着色器和像素着色器
     bool InitResource();    // 初始化网格、常量缓冲区、光照参数等
-    bool ResetMesh(const Geometry::MeshData<VertexPosNormalColor>& meshData);  // 切换显示不同类型的网格
+    template<class VertexType>
+    bool ResetMesh(const Geometry::MeshData<VertexType>& meshData);
 
 
 private:
-    // ---- 顶点/索引缓冲区 ----
-    ComPtr<ID3D11InputLayout> m_pVertexLayout;	    // 顶点输入布局（描述顶点数据的格式）
-    ComPtr<ID3D11Buffer> m_pVertexBuffer;			// 顶点缓冲区（存储顶点数据）
-    ComPtr<ID3D11Buffer> m_pIndexBuffer;			// 索引缓冲区（指定绘制顶点的顺序）
-    ComPtr<ID3D11Buffer> m_pConstantBuffers[2];	    // 常量缓冲区数组：[0] VS, [1] PS
-    UINT m_IndexCount;							    // 当前模型的索引数量（决定画多少个三角形）
+    ComPtr<ID3D11InputLayout> m_pVertexLayout2D;				// 用于2D的顶点输入布局
+    ComPtr<ID3D11InputLayout> m_pVertexLayout3D;				// 用于3D的顶点输入布局
+    ComPtr<ID3D11Buffer> m_pVertexBuffer;						// 顶点缓冲区
+    ComPtr<ID3D11Buffer> m_pIndexBuffer;						// 索引缓冲区
+    ComPtr<ID3D11Buffer> m_pConstantBuffers[2];				    // 常量缓冲区
+    UINT m_IndexCount;										    // 绘制物体的索引数组大小
+    int m_CurrFrame;											// 当前火焰动画播放到第几帧
+    ShowMode m_CurrMode;										// 当前显示的模式
 
-    // ---- 着色器 ----
-    ComPtr<ID3D11VertexShader> m_pVertexShader;	    // 顶点着色器（处理顶点变换）
-    ComPtr<ID3D11PixelShader> m_pPixelShader;		// 像素着色器（计算像素颜色）
-    ComPtr<ID3D11PixelShader> m_pWireframePS;		// 线框像素着色器（输出固定白色，用于叠加三角形边界）
-    
-    // ---- 常量缓冲区（CPU端副本） ----
-    VSConstantBuffer m_VSConstantBuffer;			// CPU端的VS常量数据，每帧修改后上传到GPU
-    PSConstantBuffer m_PSConstantBuffer;			// CPU端的PS常量数据，每帧修改后上传到GPU
+    ComPtr<ID3D11ShaderResourceView> m_pWoodCrate;			    // 木盒纹理
+    std::vector<ComPtr<ID3D11ShaderResourceView>> m_pFireAnims; // 火焰纹理集
+    ComPtr<ID3D11SamplerState> m_pSamplerState;				    // 采样器状态
 
-    // ---- 默认光照预设 ----
-    DirectionalLight m_DirLight;					// 预设的方向光（默认开启）
-    PointLight m_PointLight;						// 预设的点光源
-    SpotLight m_SpotLight;						    // 预设的聚光灯
+    ComPtr<ID3D11VertexShader> m_pVertexShader3D;				// 用于3D的顶点着色器
+    ComPtr<ID3D11PixelShader> m_pPixelShader3D;				    // 用于3D的像素着色器
+    ComPtr<ID3D11VertexShader> m_pVertexShader2D;				// 用于2D的顶点着色器
+    ComPtr<ID3D11PixelShader> m_pPixelShader2D;				    // 用于2D的像素着色器
 
-    // ---- 渲染状态 ----
-    ComPtr<ID3D11RasterizerState> m_pRS[6];   // 6种组合: [FillMode*3 + CullMode], FillMode: 0=Solid, 1=Wireframe
-    ComPtr<ID3D11DepthStencilState> m_pDSEqual;  // 深度比较 LESS_EQUAL（用于第二遍wireframe叠加）
-    int m_FillMode;                            // 0=Solid, 1=Wireframe, 2=Both
-    int m_CullMode;                            // 0=None, 1=Back, 2=Front
-    
+    VSConstantBuffer m_VSConstantBuffer;						// 用于修改用于VS的GPU常量缓冲区的变量
+    PSConstantBuffer m_PSConstantBuffer;						// 用于修改用于PS的GPU常量缓冲区的变量
 };
 
 
