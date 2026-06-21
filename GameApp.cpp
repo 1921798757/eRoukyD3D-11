@@ -57,7 +57,8 @@ void GameApp::UpdateScene(float dt)
         static int curr_mode_item = static_cast<int>(m_CurrMode);
         const char* mode_strs[] = {
             "Box",
-            "Fire Anim"
+            "Fire Anim",
+            "Flare"
         };
         if (ImGui::Combo("Mode", &curr_mode_item, mode_strs, ARRAYSIZE(mode_strs)))
         {
@@ -72,7 +73,7 @@ void GameApp::UpdateScene(float dt)
                 m_pd3dImmediateContext->PSSetShader(m_pPixelShader3D.Get(), nullptr, 0);
                 m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pWoodCrate.GetAddressOf());
             }
-            else
+            else if (curr_mode_item == 1)
             {
                 m_CurrMode = ShowMode::FireAnim;
                 m_CurrFrame = 0;
@@ -82,6 +83,21 @@ void GameApp::UpdateScene(float dt)
                 m_pd3dImmediateContext->VSSetShader(m_pVertexShader2D.Get(), nullptr, 0);
                 m_pd3dImmediateContext->PSSetShader(m_pPixelShader2D.Get(), nullptr, 0);
                 m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pFireAnims[0].GetAddressOf());
+            }
+            else
+            {
+                // Flare 模式：立方体 + 旋转纹理
+                m_CurrMode = ShowMode::Flare;
+                m_pd3dImmediateContext->IASetInputLayout(m_pVertexLayout3D.Get());
+                auto meshData = Geometry::CreateBox();
+                ResetMesh(meshData);
+                m_pd3dImmediateContext->VSSetShader(m_pVertexShaderFlare.Get(), nullptr, 0);
+                m_pd3dImmediateContext->PSSetShader(m_pPixelShaderFlare.Get(), nullptr, 0);
+                // 绑定两个纹理：flare.dds (t0) 和 flarealpha.dds (t1)
+                ID3D11ShaderResourceView* srvs[] = { m_pFlare.Get(), m_pFlareAlpha.Get() };
+                m_pd3dImmediateContext->PSSetShaderResources(0, 2, srvs);
+                // 使用 BORDER_COLOR 采样器
+                m_pd3dImmediateContext->PSSetSamplers(0, 1, m_pSamplerBorderColor.GetAddressOf());
             }
         }
     }
@@ -115,6 +131,30 @@ void GameApp::UpdateScene(float dt)
             m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pFireAnims[m_CurrFrame].GetAddressOf());
         }		
     }
+    else if (m_CurrMode == ShowMode::Flare)
+    {
+        // 立方体旋转
+        static float phi = 0.0f, theta = 0.0f;
+        phi += 0.0001f, theta += 0.00015f;
+        XMMATRIX W = XMMatrixRotationX(phi) * XMMatrixRotationY(theta);
+        m_VSConstantBuffer.world = XMMatrixTranspose(W);
+        m_VSConstantBuffer.worldInvTranspose = XMMatrixTranspose(InverseTranspose(W));
+
+        D3D11_MAPPED_SUBRESOURCE mappedData;
+        HR(m_pd3dImmediateContext->Map(m_pConstantBuffers[0].Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
+        memcpy_s(mappedData.pData, sizeof(VSConstantBuffer), &m_VSConstantBuffer, sizeof(VSConstantBuffer));
+        m_pd3dImmediateContext->Unmap(m_pConstantBuffers[0].Get(), 0);
+
+        // 纹理旋转：绕 Z 轴旋转纹理坐标
+        static float texAngle = 0.0f;
+        texAngle += 0.5f * dt;  // 每秒旋转 0.5 弧度
+        XMMATRIX texRot = XMMatrixRotationZ(texAngle);
+        m_FlareConstantBuffer.texRotation = XMMatrixTranspose(texRot);
+
+        HR(m_pd3dImmediateContext->Map(m_pFlareConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
+        memcpy_s(mappedData.pData, sizeof(FlareConstantBuffer), &m_FlareConstantBuffer, sizeof(FlareConstantBuffer));
+        m_pd3dImmediateContext->Unmap(m_pFlareConstantBuffer.Get(), 0);
+    }
 }
 
 void GameApp::DrawScene()
@@ -122,7 +162,8 @@ void GameApp::DrawScene()
     assert(m_pd3dImmediateContext);
     assert(m_pSwapChain);
 
-    m_pd3dImmediateContext->ClearRenderTargetView(m_pRenderTargetView.Get(), reinterpret_cast<const float*>(&Colors::Black));
+    static const XMFLOAT4 bgColor(0.6f, 0.6f, 0.6f, 1.0f);
+    m_pd3dImmediateContext->ClearRenderTargetView(m_pRenderTargetView.Get(), reinterpret_cast<const float*>(&bgColor));
     m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
     if (m_CurrMode == ShowMode::WoodCrate)
     {
@@ -143,6 +184,11 @@ void GameApp::DrawScene()
     {
         // 全屏四边形：一次绘制
         m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
+    else if (m_CurrMode == ShowMode::Flare)
+    {
+        // Flare 模式：立方体，所有面使用相同的两个纹理，一次绘制全部36个索引
+        m_pd3dImmediateContext->DrawIndexed(36, 0, 0);
     }
 
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -177,6 +223,14 @@ bool GameApp::InitEffect()
     HR(CreateShaderFromFile(L"HLSL\\Basic_3D_PS.cso", L"HLSL\\Basic_3D_PS.hlsl", "PS", "ps_5_0", blob.ReleaseAndGetAddressOf()));
     HR(m_pd3dDevice->CreatePixelShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, m_pPixelShader3D.GetAddressOf()));
 
+    // 创建顶点着色器(Flare)
+    HR(CreateShaderFromFile(L"HLSL\\Flare_VS.cso", L"HLSL\\Flare_VS.hlsl", "VS", "vs_5_0", blob.ReleaseAndGetAddressOf()));
+    HR(m_pd3dDevice->CreateVertexShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, m_pVertexShaderFlare.GetAddressOf()));
+
+    // 创建像素着色器(Flare)
+    HR(CreateShaderFromFile(L"HLSL\\Flare_PS.cso", L"HLSL\\Flare_PS.hlsl", "PS", "ps_5_0", blob.ReleaseAndGetAddressOf()));
+    HR(m_pd3dDevice->CreatePixelShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, m_pPixelShaderFlare.GetAddressOf()));
+
     return true;
 }
 
@@ -199,6 +253,10 @@ bool GameApp::InitResource()
     HR(m_pd3dDevice->CreateBuffer(&cbd, nullptr, m_pConstantBuffers[0].GetAddressOf()));
     cbd.ByteWidth = sizeof(PSConstantBuffer);
     HR(m_pd3dDevice->CreateBuffer(&cbd, nullptr, m_pConstantBuffers[1].GetAddressOf()));
+
+    // 创建 Flare 纹理旋转矩阵常量缓冲区（寄存器 b2）
+    cbd.ByteWidth = sizeof(FlareConstantBuffer);
+    HR(m_pd3dDevice->CreateBuffer(&cbd, nullptr, m_pFlareConstantBuffer.GetAddressOf()));
 
     // ******************
     // 初始化纹理和采样器状态
@@ -235,6 +293,12 @@ bool GameApp::InitResource()
         m_pFireAnims[static_cast<size_t>(i) - 1].GetAddressOf()
     ));
     }
+
+    // 初始化 Flare 纹理（flare.dds 和 flarealpha.dds）
+    HR(CreateDDSTextureFromFile(m_pd3dDevice.Get(), L"Texture\\flare.dds",
+        nullptr, m_pFlare.GetAddressOf()));
+    HR(CreateDDSTextureFromFile(m_pd3dDevice.Get(), L"Texture\\flarealpha.dds",
+        nullptr, m_pFlareAlpha.GetAddressOf()));
         
     // 初始化采样器状态
     D3D11_SAMPLER_DESC sampDesc;
@@ -247,6 +311,22 @@ bool GameApp::InitResource()
     sampDesc.MinLOD = 0;
     sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
     HR(m_pd3dDevice->CreateSamplerState(&sampDesc, m_pSamplerState.GetAddressOf()));
+
+    // 创建 BORDER_COLOR 寻址模式的采样器（用于 Flare 纹理旋转）
+    D3D11_SAMPLER_DESC borderDesc;
+    ZeroMemory(&borderDesc, sizeof(borderDesc));
+    borderDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    borderDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+    borderDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+    borderDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+    borderDesc.BorderColor[0] = 0.0f;  // R
+    borderDesc.BorderColor[1] = 0.0f;  // G
+    borderDesc.BorderColor[2] = 0.0f;  // B
+    borderDesc.BorderColor[3] = 1.0f;  // A
+    borderDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    borderDesc.MinLOD = 0;
+    borderDesc.MaxLOD = D3D11_FLOAT32_MAX;
+    HR(m_pd3dDevice->CreateSamplerState(&borderDesc, m_pSamplerBorderColor.GetAddressOf()));
 
     
     // ******************
@@ -287,6 +367,13 @@ bool GameApp::InitResource()
     memcpy_s(mappedData.pData, sizeof(PSConstantBuffer), &m_PSConstantBuffer, sizeof(PSConstantBuffer));
     m_pd3dImmediateContext->Unmap(m_pConstantBuffers[1].Get(), 0);
 
+    // 初始化 Flare 纹理旋转矩阵（初始为单位矩阵）
+    m_TexRotation = XMMatrixIdentity();
+    m_FlareConstantBuffer.texRotation = XMMatrixTranspose(m_TexRotation);
+    HR(m_pd3dImmediateContext->Map(m_pFlareConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
+    memcpy_s(mappedData.pData, sizeof(FlareConstantBuffer), &m_FlareConstantBuffer, sizeof(FlareConstantBuffer));
+    m_pd3dImmediateContext->Unmap(m_pFlareConstantBuffer.Get(), 0);
+
     // ******************
     // 给渲染管线各个阶段绑定好所需资源
     // 设置图元类型，设定输入布局
@@ -303,6 +390,10 @@ bool GameApp::InitResource()
     m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pWoodCrate.GetAddressOf());
     m_pd3dImmediateContext->PSSetShader(m_pPixelShader3D.Get(), nullptr, 0);
     
+    // Flare 模式默认绑定（b2 寄存器）
+    m_pd3dImmediateContext->VSSetConstantBuffers(2, 1, m_pFlareConstantBuffer.GetAddressOf());
+    m_pd3dImmediateContext->PSSetConstantBuffers(2, 1, m_pFlareConstantBuffer.GetAddressOf());
+    
     // ******************
     // 设置调试对象名
     //
@@ -315,6 +406,10 @@ bool GameApp::InitResource()
     D3D11SetDebugObjectName(m_pPixelShader2D.Get(), "Basic_2D_PS");
     D3D11SetDebugObjectName(m_pPixelShader3D.Get(), "Basic_3D_PS");
     D3D11SetDebugObjectName(m_pSamplerState.Get(), "SSLinearWrap");
+    D3D11SetDebugObjectName(m_pVertexShaderFlare.Get(), "Flare_VS");
+    D3D11SetDebugObjectName(m_pPixelShaderFlare.Get(), "Flare_PS");
+    D3D11SetDebugObjectName(m_pSamplerBorderColor.Get(), "SSBorder");
+    D3D11SetDebugObjectName(m_pFlareConstantBuffer.Get(), "FlareConstantBuffer");
 
     return true;
 }
