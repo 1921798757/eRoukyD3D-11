@@ -124,9 +124,26 @@ void GameApp::DrawScene()
 
     m_pd3dImmediateContext->ClearRenderTargetView(m_pRenderTargetView.Get(), reinterpret_cast<const float*>(&Colors::Black));
     m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
-    
-    // 绘制几何模型
-    m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    if (m_CurrMode == ShowMode::WoodCrate)
+    {
+        // 立方体：分6面绘制
+        m_pd3dImmediateContext->PSSetSamplers(0, 1, m_pSamplerState.GetAddressOf());
+        for (int face = 0; face < 6; ++face)
+        {
+            // 这里srvs是数组的原因是，PSSetShaderResources需要传入一个数组，即使我们每次只绑定一个纹理资源视图，也必须传入一个长度为1的数组
+            ID3D11ShaderResourceView* srvs[] = { m_pFaceSRV[face].Get() };
+            m_pd3dImmediateContext->PSSetShaderResources(0, 1, srvs);
+            m_pd3dImmediateContext->DrawIndexed(6, face * 6, 0);
+            // 这里的face * 6是因为每个面有6个索引，face从0到5，依次绘制6个面，每个面使用不同的纹理资源视图。
+            // 0~5，6~11，12~17，18~23，24~29，30~35，每6个索引对应一个面。
+            // DrawIndexed的参数分别是：每个面绘制6个索引，索引从face * 6开始，顶点从0开始。
+        }
+    }
+    else if (m_CurrMode == ShowMode::FireAnim)
+    {
+        // 全屏四边形：一次绘制
+        m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
 
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
@@ -188,21 +205,42 @@ bool GameApp::InitResource()
     //
 
     // 初始化木箱纹理
-    HR(CreateDDSTextureFromFile(m_pd3dDevice.Get(), L"..\\Texture\\WoodCrate.dds", nullptr, m_pWoodCrate.GetAddressOf()));
+    // 使用 D3DX11 或 WICTextureLoader 加载纹理
+    const wchar_t* faceFiles[6] = {
+        L"Texture/1.png",   // +X
+        L"Texture/2.png",    // -X
+        L"Texture/3.png",     // +Y
+        L"Texture/4.png",  // -Y
+        L"Texture/5.png",    // +Z
+        L"Texture/6.png"    // -Z
+    };
+    for (int i = 0; i < 6; ++i)
+    {
+        HR(CreateWICTextureFromFile(m_pd3dDevice.Get(), faceFiles[i],
+            nullptr, m_pFaceSRV[i].GetAddressOf()));
+    }
+
     // 初始化火焰纹理
     WCHAR strFile[40];
     m_pFireAnims.resize(120);
     for (int i = 1; i <= 120; ++i)
     {
         wsprintf(strFile, L"..\\Texture\\FireAnim\\Fire%03d.bmp", i);
-        HR(CreateWICTextureFromFile(m_pd3dDevice.Get(), strFile, nullptr, m_pFireAnims[static_cast<size_t>(i) - 1].GetAddressOf()));
+        // 03：至少3位，不足补0，d：整数
+        // wsprintf 输出类型wchar_t*（宽字符）
+
+        HR(CreateWICTextureFromFile(m_pd3dDevice.Get(), 
+        strFile, 
+        nullptr, 
+        m_pFireAnims[static_cast<size_t>(i) - 1].GetAddressOf()
+    ));
     }
         
     // 初始化采样器状态
     D3D11_SAMPLER_DESC sampDesc;
     ZeroMemory(&sampDesc, sizeof(sampDesc));
-    sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-    sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    sampDesc.Filter = D3D11_FILTER_ANISOTROPIC;
+    sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP; 
     sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
     sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
     sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
