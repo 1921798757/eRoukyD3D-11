@@ -51,7 +51,16 @@ public:
         DirectX::XMFLOAT4 eyePos;
     };
 
-    enum class ShowMode { WoodCrate, FireAnim };
+    //------------------------------------------------------
+    // FlareConstantBuffer - Flare 模式顶点着色器常量缓冲区
+    // 包含纹理坐标的旋转矩阵（4x4）
+    //------------------------------------------------------
+    struct FlareConstantBuffer
+    {
+        DirectX::XMMATRIX texRotation;  // 纹理坐标旋转矩阵
+    };
+
+    enum class ShowMode { WoodCrate, FireAnim, Flare };
 
 public:
     GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWidth, int initHeight);
@@ -89,10 +98,23 @@ private:
     ComPtr<ID3D11VertexShader> m_pVertexShader2D;				// 用于2D的顶点着色器
     ComPtr<ID3D11PixelShader> m_pPixelShader2D;				    // 用于2D的像素着色器
 
-    ComPtr<ID3D11ShaderResourceView> m_pFaceSRV[6];             // 立方体贴图的6个面纹理资源视图
+    // Flare 纹理相关
+    ComPtr<ID3D11ShaderResourceView> m_pFlare;              // flare.dds 火焰纹理
+    ComPtr<ID3D11ShaderResourceView> m_pFlareAlpha;         // flarealpha.dds alpha遮罩纹理
+    ComPtr<ID3D11SamplerState> m_pSamplerBorderColor;       // BORDER_COLOR 寻址模式的采样器
+    ComPtr<ID3D11Buffer> m_pFlareConstantBuffer;            // 纹理旋转矩阵常量缓冲区
 
-    VSConstantBuffer m_VSConstantBuffer;						// 用于修改用于VS的GPU常量缓冲区的变量
-    PSConstantBuffer m_PSConstantBuffer;						// 用于修改用于PS的GPU常量缓冲区的变量
+    ComPtr<ID3D11VertexShader> m_pVertexShaderFlare;        // Flare 模式顶点着色器
+    ComPtr<ID3D11PixelShader> m_pPixelShaderFlare;          // Flare 模式像素着色器
+
+    ComPtr<ID3D11ShaderResourceView> m_pFaceSRV[6];         // 立方体贴图的6个面纹理资源视图
+
+    VSConstantBuffer m_VSConstantBuffer;                    // 用于修改用于VS的GPU常量缓冲区的变量
+    PSConstantBuffer m_PSConstantBuffer;                    // 用于修改用于PS的GPU常量缓冲区的变量
+
+    // Flare 纹理旋转矩阵（CPU端）
+    DirectX::XMMATRIX m_TexRotation;
+    FlareConstantBuffer m_FlareConstantBuffer;
 };
 
 
