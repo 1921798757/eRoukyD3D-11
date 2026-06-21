@@ -25,9 +25,6 @@ public:
 
     int Run();                      // 运行程序，执行消息事件的循环
 
-    // 获取并清零鼠标滚轮增量（每帧调用一次）
-    short GetMouseWheelDelta() { short d = m_MouseWheelDelta; m_MouseWheelDelta = 0; return d; }
-
     // 框架方法。客户派生类需要重载这些方法以实现特定的应用需求
     virtual bool Init();                      // 该父类方法需要初始化窗口、Direct2D和Direct3D部分
     virtual void OnResize();                  // 该父类方法需要在窗口大小变动的时候调用
@@ -40,8 +37,7 @@ protected:
     bool InitDirect3D();         // Direct3D初始化
     bool InitImGui();            // ImGui初始化
 
-    short m_MouseWheelDelta = 0;  // 鼠标滚轮增量   
-
+  
     void CalculateFrameStats();  // 计算每秒帧数并在窗口显示
 
 protected:

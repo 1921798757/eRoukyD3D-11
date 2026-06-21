@@ -34,6 +34,8 @@ add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
 # 拷贝着色器目录到输出目录
 file(COPY ${HLSL_DIR} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# 新增：拷贝纹理目录到输出目录
+file(COPY Texture DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 # 收集当前目录下的源码、头文件以及 HLSL 目录下的着色器文件
 file(GLOB HLSL_FILES ${HLSL_DIR}/*.hlsl ${HLSL_DIR}/*.hlsli)
