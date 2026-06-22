@@ -17,7 +17,7 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
     float4 D = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float4 S = float4(0.0f, 0.0f, 0.0f, 0.0f);
     int i;
-    
+
     for (i = 0; i < g_NumDirLight; ++i)
     {
         ComputeDirectionalLight(g_Material, g_DirLight[i], pIn.normalW, toEyeW, A, D, S);
