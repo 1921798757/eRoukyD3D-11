@@ -29,4 +29,5 @@ struct VertexPosHTex
 float4 PS(VertexPosHTex pIn) : SV_Target
 {
     return g_FireTex.Sample(g_SamLinear, float3(pIn.tex, g_FireFrame));
+    // Texture2DArray.Sample函数的第三个参数是一个float3，其中x和y是纹理坐标，z是数组索引（帧数），或者是哪一帧动画。
 }
