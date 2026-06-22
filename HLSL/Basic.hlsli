@@ -21,7 +21,7 @@ cbuffer PSConstantBuffer : register(b1)
     int g_NumDirLight;
     int g_NumPointLight;
     int g_NumSpotLight;
-    float g_Pad1;
+    int g_FireFrame;
 
     float3 g_EyePosW;
     float g_Pad2;
@@ -54,13 +54,3 @@ struct VertexPosHTex
     float4 posH : SV_POSITION;
     float2 tex : TEXCOORD;
 };
-
-
-
-
-
-
-
-
-
-
