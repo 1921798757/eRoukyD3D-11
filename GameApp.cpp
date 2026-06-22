@@ -1,6 +1,7 @@
 #include "GameApp.h"
 #include "d3dUtil.h"
 #include "DXTrace.h"
+#include <wincodec.h>   // WIC for decoding bitmaps
 using namespace DirectX;
 
 GameApp::GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWidth, int initHeight)
@@ -71,7 +72,7 @@ void GameApp::UpdateScene(float dt)
                 ResetMesh(meshData);
                 m_pd3dImmediateContext->VSSetShader(m_pVertexShader3D.Get(), nullptr, 0);
                 m_pd3dImmediateContext->PSSetShader(m_pPixelShader3D.Get(), nullptr, 0);
-                m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pWoodCrate.GetAddressOf());
+                // DrawScene 中会逐面绑定 m_pFaceSRV[face]，所以这里不绑定
             }
             else if (curr_mode_item == 1)
             {
@@ -82,7 +83,10 @@ void GameApp::UpdateScene(float dt)
                 ResetMesh(meshData);
                 m_pd3dImmediateContext->VSSetShader(m_pVertexShader2D.Get(), nullptr, 0);
                 m_pd3dImmediateContext->PSSetShader(m_pPixelShader2D.Get(), nullptr, 0);
-                m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pFireAnims[0].GetAddressOf());
+                // 设置采样器
+                m_pd3dImmediateContext->PSSetSamplers(0, 1, m_pSamplerState.GetAddressOf());
+                // 只需绑定一次纹理数组 SRV，后续通过 fireFrame 切换帧
+                m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pFireAnimArray.GetAddressOf());
             }
             else
             {
@@ -128,7 +132,13 @@ void GameApp::UpdateScene(float dt)
         {
             totDeltaTime -= 1.0f / 60;
             m_CurrFrame = (m_CurrFrame + 1) % 120;
-            m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pFireAnims[m_CurrFrame].GetAddressOf());
+
+            // 更新 PS 常量缓冲区中的 fireFrame，HLSL 通过 g_FireFrame 选择纹理数组的层
+            m_PSConstantBuffer.fireFrame = m_CurrFrame;
+            D3D11_MAPPED_SUBRESOURCE mappedData;
+            HR(m_pd3dImmediateContext->Map(m_pConstantBuffers[1].Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
+            memcpy_s(mappedData.pData, sizeof(PSConstantBuffer), &m_PSConstantBuffer, sizeof(PSConstantBuffer));
+            m_pd3dImmediateContext->Unmap(m_pConstantBuffers[1].Get(), 0);
         }		
     }
     else if (m_CurrMode == ShowMode::Flare)
@@ -183,6 +193,7 @@ void GameApp::DrawScene()
     else if (m_CurrMode == ShowMode::FireAnim)
     {
         // 全屏四边形：一次绘制
+        // 纹理数组 SRV 和 fireFrame 常量已在 UpdateScene 中设置好
         m_pd3dImmediateContext->DrawIndexed(m_IndexCount, 0, 0);
     }
     else if (m_CurrMode == ShowMode::Flare)
@@ -278,21 +289,74 @@ bool GameApp::InitResource()
             nullptr, m_pFaceSRV[i].GetAddressOf()));
     }
 
-    // 初始化火焰纹理
-    WCHAR strFile[40];
-    m_pFireAnims.resize(120);
-    for (int i = 1; i <= 120; ++i)
-    {
-        wsprintf(strFile, L"..\\Texture\\FireAnim\\Fire%03d.bmp", i);
-        // 03：至少3位，不足补0，d：整数
-        // wsprintf 输出类型wchar_t*（宽字符）
+    // ******************
+    // 创建火焰纹理数组 (Texture2DArray)
+    // 将所有 120 帧 BMP 存储在一个纹理数组中
+    //
 
-        HR(CreateWICTextureFromFile(m_pd3dDevice.Get(), 
-        strFile, 
-        nullptr, 
-        m_pFireAnims[static_cast<size_t>(i) - 1].GetAddressOf()
-    ));
+    // 1. 加载第1帧获得纹理格式和尺寸
+    ComPtr<ID3D11Resource> pFirstRes;
+    ComPtr<ID3D11ShaderResourceView> pFirstSRV;
+    HR(CreateWICTextureFromFile(m_pd3dDevice.Get(), L"Texture\\FireAnim\\Fire001.bmp",
+        pFirstRes.GetAddressOf(), pFirstSRV.GetAddressOf()));
+
+    ComPtr<ID3D11Texture2D> pFirstTex;
+    HR(pFirstRes.As(&pFirstTex));
+    D3D11_TEXTURE2D_DESC firstDesc;
+    pFirstTex->GetDesc(&firstDesc);
+
+    // 2. 创建 2D 纹理数组（120 层，每层一帧）
+    D3D11_TEXTURE2D_DESC arrayDesc = {};
+    arrayDesc.Width = firstDesc.Width;
+    arrayDesc.Height = firstDesc.Height;
+    arrayDesc.MipLevels = 1;
+    arrayDesc.ArraySize = 120;
+    arrayDesc.Format = firstDesc.Format;
+    arrayDesc.SampleDesc.Count = 1;
+    arrayDesc.Usage = D3D11_USAGE_DEFAULT;
+    arrayDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    ComPtr<ID3D11Texture2D> pFireAnimTex;
+    HR(m_pd3dDevice->CreateTexture2D(&arrayDesc, nullptr, pFireAnimTex.GetAddressOf()));
+
+    // 3. 将第1帧拷贝到数组的 slice 0
+    m_pd3dImmediateContext->CopySubresourceRegion(
+        pFireAnimTex.Get(), 0,  // dest, array slice 0 (subresource = 0)
+        0, 0, 0,
+        pFirstTex.Get(), 0,     // src, subresource 0
+        nullptr);               // full copy
+
+    // 4. 加载第2~120帧并拷贝到对应的 array slice
+    for (int i = 2; i <= 120; ++i)
+    {
+        WCHAR strFile[40];
+        wsprintf(strFile, L"Texture\\FireAnim\\Fire%03d.bmp", i);
+        ComPtr<ID3D11Resource> pFrameRes;
+        ComPtr<ID3D11ShaderResourceView> pFrameSRV;
+        HR(CreateWICTextureFromFile(m_pd3dDevice.Get(), strFile,
+            pFrameRes.GetAddressOf(), pFrameSRV.GetAddressOf()));
+
+        ComPtr<ID3D11Texture2D> pFrameTex;
+        HR(pFrameRes.As(&pFrameTex));
+
+        // 拷贝到数组的第 (i-1) 个 slice
+        // subresource = MipSlice + (ArraySlice * MipLevels) = 0 + (i-1) * 1 = i-1
+        m_pd3dImmediateContext->CopySubresourceRegion(
+            pFireAnimTex.Get(), i - 1,
+            0, 0, 0,
+            pFrameTex.Get(), 0,
+            nullptr);
     }
+
+    // 5. 为纹理数组创建 SRV
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = arrayDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+    srvDesc.Texture2DArray.MostDetailedMip = 0;
+    srvDesc.Texture2DArray.MipLevels = 1;
+    srvDesc.Texture2DArray.FirstArraySlice = 0;
+    srvDesc.Texture2DArray.ArraySize = 120;
+    HR(m_pd3dDevice->CreateShaderResourceView(pFireAnimTex.Get(), &srvDesc, m_pFireAnimArray.GetAddressOf()));
 
     // 初始化 Flare 纹理（flare.dds 和 flarealpha.dds）
     HR(CreateDDSTextureFromFile(m_pd3dDevice.Get(), L"Texture\\flare.dds",
@@ -354,6 +418,7 @@ bool GameApp::InitResource()
     m_PSConstantBuffer.numDirLight = 0;
     m_PSConstantBuffer.numPointLight = 1;
     m_PSConstantBuffer.numSpotLight = 0;
+    m_PSConstantBuffer.fireFrame = 0;   // 初始帧为第0帧
     // 初始化材质
     m_PSConstantBuffer.material.ambient = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
     m_PSConstantBuffer.material.diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -387,7 +452,8 @@ bool GameApp::InitResource()
     m_pd3dImmediateContext->PSSetConstantBuffers(1, 1, m_pConstantBuffers[1].GetAddressOf());
     // 像素着色阶段设置好采样器
     m_pd3dImmediateContext->PSSetSamplers(0, 1, m_pSamplerState.GetAddressOf());
-    m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pWoodCrate.GetAddressOf());
+    // 默认绑定第1个面纹理；WoodCrate模式下DrawScene会逐面重新绑定
+    m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pFaceSRV[0].GetAddressOf());
     m_pd3dImmediateContext->PSSetShader(m_pPixelShader3D.Get(), nullptr, 0);
     
     // Flare 模式默认绑定（b2 寄存器）

@@ -47,7 +47,7 @@ public:
         int numDirLight;
         int numPointLight;
         int numSpotLight;
-        float pad;		// 打包保证16字节对齐
+        int fireFrame;      // 火焰动画当前帧索引，供 Texture2DArray 采样用
         DirectX::XMFLOAT4 eyePos;
     };
 
@@ -90,7 +90,7 @@ private:
     ShowMode m_CurrMode;										// 当前显示的模式
 
     ComPtr<ID3D11ShaderResourceView> m_pWoodCrate;			    // 木盒纹理
-    std::vector<ComPtr<ID3D11ShaderResourceView>> m_pFireAnims; // 火焰纹理集
+    ComPtr<ID3D11ShaderResourceView> m_pFireAnimArray;          // 火焰纹理数组 (Texture2DArray, 120帧)
     ComPtr<ID3D11SamplerState> m_pSamplerState;				    // 采样器状态
 
     ComPtr<ID3D11VertexShader> m_pVertexShader3D;				// 用于3D的顶点着色器
