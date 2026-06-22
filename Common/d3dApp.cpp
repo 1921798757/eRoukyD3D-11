@@ -58,11 +58,13 @@ D3DApp::D3DApp(HINSTANCE hInstance, const std::wstring& windowName, int initWidt
     g_pd3dApp = this;
 }
 
+
 D3DApp::~D3DApp()
 {
     // 恢复所有默认设定
     if (m_pd3dImmediateContext)
         m_pd3dImmediateContext->ClearState();
+
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
@@ -138,7 +140,7 @@ void D3DApp::OnResize()
     assert(m_pd3dImmediateContext);
     assert(m_pd3dDevice);
     assert(m_pSwapChain);
-    
+
     if (m_pd3dDevice1 != nullptr)
     {
         assert(m_pd3dImmediateContext1);
@@ -156,10 +158,10 @@ void D3DApp::OnResize()
     HR(m_pSwapChain->ResizeBuffers(1, m_ClientWidth, m_ClientHeight, DXGI_FORMAT_B8G8R8A8_UNORM, 0));	// 注意此处DXGI_FORMAT_B8G8R8A8_UNORM
     HR(m_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(backBuffer.GetAddressOf())));
     HR(m_pd3dDevice->CreateRenderTargetView(backBuffer.Get(), nullptr, m_pRenderTargetView.GetAddressOf()));
-    
+
     // 设置调试对象名
     D3D11SetDebugObjectName(backBuffer.Get(), "BackBuffer[0]");
-    
+
     backBuffer.Reset();
 
 
@@ -206,12 +208,12 @@ void D3DApp::OnResize()
     m_ScreenViewport.MaxDepth = 1.0f;
 
     m_pd3dImmediateContext->RSSetViewports(1, &m_ScreenViewport);
-    
+
     // 设置调试对象名
     D3D11SetDebugObjectName(m_pDepthStencilBuffer.Get(), "DepthStencilBuffer");
     D3D11SetDebugObjectName(m_pDepthStencilView.Get(), "DepthStencilView");
     D3D11SetDebugObjectName(m_pRenderTargetView.Get(), "BackBufferRTV[0]");
-    
+
 }
 
 LRESULT D3DApp::MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -352,6 +354,10 @@ bool D3DApp::InitMainWindow()
         return false;
     }
 
+    // 将窗口调整到中心
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
     // Compute window rectangle dimensions based on requested client area dimensions.
     RECT R = { 0, 0, m_ClientWidth, m_ClientHeight };
     AdjustWindowRect(&R, WS_OVERLAPPEDWINDOW, false);
@@ -359,7 +365,8 @@ bool D3DApp::InitMainWindow()
     int height = R.bottom - R.top;
 
     m_hMainWnd = CreateWindow(L"D3DWndClassName", m_MainWndCaption.c_str(),
-        WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, width, height, 0, 0, m_hAppInst, 0);
+        WS_OVERLAPPEDWINDOW, (screenWidth - width) / 2, (screenHeight - height) / 2, width, height, 0, 0, m_hAppInst, 0);
+
     if (!m_hMainWnd)
     {
         MessageBox(0, L"CreateWindow Failed.", 0, 0);
@@ -368,7 +375,7 @@ bool D3DApp::InitMainWindow()
 
     ShowWindow(m_hMainWnd, SW_SHOW);
     UpdateWindow(m_hMainWnd);
-    
+
     return true;
 }
 
@@ -377,7 +384,10 @@ bool D3DApp::InitDirect3D()
     HRESULT hr = S_OK;
 
     // 创建D3D设备 和 D3D设备上下文
-    UINT createDeviceFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;	// Direct2D需要支持BGRA格式
+    UINT createDeviceFlags = 0;
+#ifndef USE_IMGUI
+    createDeviceFlags |= D3D11_CREATE_DEVICE_BGRA_SUPPORT;	// Direct2D需要支持BGRA格式
+#endif
 #if defined(DEBUG) || defined(_DEBUG)  
     createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
@@ -405,7 +415,7 @@ bool D3DApp::InitDirect3D()
         d3dDriverType = driverTypes[driverTypeIndex];
         hr = D3D11CreateDevice(nullptr, d3dDriverType, nullptr, createDeviceFlags, featureLevels, numFeatureLevels,
             D3D11_SDK_VERSION, m_pd3dDevice.GetAddressOf(), &featureLevel, m_pd3dImmediateContext.GetAddressOf());
-        
+
         if (hr == E_INVALIDARG)
         {
             // Direct3D 11.0 的API不承认D3D_FEATURE_LEVEL_11_1，所以我们需要尝试特性等级11.0以及以下的版本
@@ -432,23 +442,23 @@ bool D3DApp::InitDirect3D()
 
     // 检测 MSAA支持的质量等级
     m_pd3dDevice->CheckMultisampleQualityLevels(
-        DXGI_FORMAT_B8G8R8A8_UNORM, 4, &m_4xMsaaQuality);	// 注意此处DXGI_FORMAT_B8G8R8A8_UNORM
+        DXGI_FORMAT_R8G8B8A8_UNORM, 4, &m_4xMsaaQuality);
     assert(m_4xMsaaQuality > 0);
 
-    
-    
+
+
 
     ComPtr<IDXGIDevice> dxgiDevice = nullptr;
     ComPtr<IDXGIAdapter> dxgiAdapter = nullptr;
-    ComPtr<IDXGIFactory1> dxgiFactory1 = nullptr;   // D3D11.0(包含DXGI1.1)的接口类
-    ComPtr<IDXGIFactory2> dxgiFactory2 = nullptr;   // D3D11.1(包含DXGI1.2)特有的接口类
-    
+    ComPtr<IDXGIFactory1> dxgiFactory1 = nullptr;	// D3D11.0(包含DXGI1.1)的接口类
+    ComPtr<IDXGIFactory2> dxgiFactory2 = nullptr;	// D3D11.1(包含DXGI1.2)特有的接口类
+
     // 为了正确创建 DXGI交换链，首先我们需要获取创建 D3D设备 的 DXGI工厂，否则会引发报错：
     // "IDXGIFactory::CreateSwapChain: This function is being called with a device from a different IDXGIFactory."
     HR(m_pd3dDevice.As(&dxgiDevice));
     HR(dxgiDevice->GetAdapter(dxgiAdapter.GetAddressOf()));
     HR(dxgiAdapter->GetParent(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(dxgiFactory1.GetAddressOf())));
-    
+
     // 查看该对象是否包含IDXGIFactory2接口
     hr = dxgiFactory1.As(&dxgiFactory2);
     // 如果包含，则说明支持D3D11.1
@@ -461,7 +471,11 @@ bool D3DApp::InitDirect3D()
         ZeroMemory(&sd, sizeof(sd));
         sd.Width = m_ClientWidth;
         sd.Height = m_ClientHeight;
+#ifdef USE_IMGUI
+        sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+#else
         sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;		// 注意此处DXGI_FORMAT_B8G8R8A8_UNORM
+#endif
         // 是否开启4倍多重采样？
         if (m_Enable4xMsaa)
         {
@@ -497,7 +511,11 @@ bool D3DApp::InitDirect3D()
         sd.BufferDesc.Height = m_ClientHeight;
         sd.BufferDesc.RefreshRate.Numerator = 60;
         sd.BufferDesc.RefreshRate.Denominator = 1;
-        sd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;	// 注意此处DXGI_FORMAT_B8G8R8A8_UNORM
+#ifdef USE_IMGUI
+        sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+#else
+        sd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;		// 注意此处DXGI_FORMAT_B8G8R8A8_UNORM
+#endif
         sd.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
         sd.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
         // 是否开启4倍多重采样？
@@ -526,7 +544,7 @@ bool D3DApp::InitDirect3D()
     // 设置调试对象名
     D3D11SetDebugObjectName(m_pd3dImmediateContext.Get(), "ImmediateContext");
     DXGISetDebugObjectName(m_pSwapChain.Get(), "SwapChain");
-    
+
     // 每当窗口被重新调整大小的时候，都需要调用这个OnResize函数。现在调用
     // 以避免代码重复
     OnResize();

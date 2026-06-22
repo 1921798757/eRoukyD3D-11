@@ -1,5 +1,9 @@
 //***************************************************************************************
+// Geometry.h by X_Jun(MKXJun) (C) 2018-2022 All Rights Reserved.
+// Licensed under the MIT License.
+//
 // 生成常见的几何体网格模型
+// Generate common geometry meshes.
 //***************************************************************************************
 
 #ifndef GEOMETRY_H_
@@ -53,12 +57,6 @@ namespace Geometry
     MeshData<VertexType, IndexType> CreateCone(float radius = 1.0f, float height = 2.0f, UINT slices = 20,
         const DirectX::XMFLOAT4& color = { 1.0f, 1.0f, 1.0f, 1.0f });
 
-        // 创建胶囊体网格数据（上下半球 + 柱体/锥台）
-    template<class VertexType = VertexPosNormalTex, class IndexType = DWORD>
-    MeshData<VertexType, IndexType> CreateCapsule(float topRadius = 0.5f, float bottomRadius = 0.5f,
-        float height = 2.0f, UINT slices = 20, UINT topLevels = 10, UINT bottomLevels = 10,
-        const DirectX::XMFLOAT4& color = { 1.0f, 1.0f, 1.0f, 1.0f });
-
     // 创建只有圆锥体侧面网格数据，slices越大，精度越高。
     template<class VertexType = VertexPosNormalTex, class IndexType = DWORD>
     MeshData<VertexType, IndexType> CreateConeNoCap(float radius = 1.0f, float height = 2.0f, UINT slices = 20,
@@ -97,7 +95,6 @@ namespace Geometry
 
 
 
-
 namespace Geometry
 {
     namespace Internal
@@ -106,8 +103,6 @@ namespace Geometry
         // 以下结构体和函数仅供内部实现使用
         //
 
-        // 内部顶点数据结构：包含所有可能的顶点属性（位置、法线、切线、颜色、纹理坐标），
-        // 供 InsertVertexElement 从中选择性复制到目标顶点类型。
         struct VertexData
         {
             DirectX::XMFLOAT3 pos;
@@ -117,23 +112,19 @@ namespace Geometry
             DirectX::XMFLOAT2 tex;
         };
 
-        // 根据目标顶点类型 VertexType 的 inputLayout 语义信息，
-        // 将 vertexSrc 中对应范围的字节数据拷贝到 vertexDst 中对应偏移处。
-        // 这是实现"通用顶点生成"的关键：无论目标顶点格式是什么，
-        // 只要其 inputLayout 包含 POSITION / NORMAL / TANGENT / COLOR / TEXCOORD 中的部分或全部语义，
-        // 此函数就能正确地将数据填入对应的成员位置。
+        // 根据目标顶点类型选择性将数据插入
         template<class VertexType>
         inline void InsertVertexElement(VertexType& vertexDst, const VertexData& vertexSrc)
         {
             static std::string semanticName;
             static const std::map<std::string, std::pair<size_t, size_t>> semanticSizeMap = {
-                {"POSITION", std::pair<size_t, size_t>(0, 12)},     // 0~12
-                {"NORMAL", std::pair<size_t, size_t>(12, 24)},      // 12~24
-                {"TANGENT", std::pair<size_t, size_t>(24, 40)},     // 24~40
-                {"COLOR", std::pair<size_t, size_t>(40, 56)},       // 40~56
-                {"TEXCOORD", std::pair<size_t, size_t>(56, 64)}     // 56~64
+                {"POSITION", std::pair<size_t, size_t>(0, 12)},
+                {"NORMAL", std::pair<size_t, size_t>(12, 24)},
+                {"TANGENT", std::pair<size_t, size_t>(24, 40)},
+                {"COLOR", std::pair<size_t, size_t>(40, 56)},
+                {"TEXCOORD", std::pair<size_t, size_t>(56, 64)}
             };
-            // ARRYSIZE:在编译期，计算出一个普通 C 风格数组里有多少个元素。
+
             for (size_t i = 0; i < ARRAYSIZE(VertexType::inputLayout); i++)
             {
                 semanticName = VertexType::inputLayout[i].SemanticName;
@@ -150,18 +141,6 @@ namespace Geometry
     // 几何体方法的实现
     //
 
-    // ----------------------------------------------------------
-    // CreateSphere — 创建球体网格
-    // 参数：
-    //   radius : 球体半径
-    //   levels : 纬度分割数（越多越圆滑）
-    //   slices : 经度分割数（越多越圆滑）
-    //   color  : 顶点颜色
-    // 说明：
-    //   球体几何由经纬度网格构成，先放顶端点（北极），
-    //   然后逐层生成中间纬圈顶点，最后放底端点（南极）。
-    //   同时为每个顶点计算法线（归一化位置向量）和切线。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreateSphere(float radius, UINT levels, UINT slices, const DirectX::XMFLOAT4 & color)
     {
@@ -251,18 +230,6 @@ namespace Geometry
         return meshData;
     }
 
-    // ----------------------------------------------------------
-    // CreateBox — 创建立方体网格
-    // 参数：
-    //   width  : X 轴方向宽度
-    //   height : Y 轴方向高度
-    //   depth  : Z 轴方向深度
-    //   color  : 顶点颜色
-    // 说明：
-    //   立方体由 6 个面构成（右/左/顶/底/背/正），
-    //   每个面由 4 个顶点组成，共 24 个顶点（因为每个面需要独立的法线/切线/纹理坐标）。
-    //   索引数组直接列出 12 个三角形（每面 2 个）。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreateBox(float width, float height, float depth, const DirectX::XMFLOAT4 & color)
     {
@@ -359,19 +326,6 @@ namespace Geometry
         return meshData;
     }
 
-    // ----------------------------------------------------------
-    // CreateCylinder — 创建完整圆柱体网格（含顶盖和底盖）
-    // 参数：
-    //   radius : 圆柱半径
-    //   height : 圆柱高度
-    //   slices : 圆周分割数（越多越圆滑）
-    //   stacks : 高度方向分割数
-    //   texU, texV : 纹理坐标缩放
-    //   color  : 顶点颜色
-    // 说明：
-    //   先调用 CreateCylinderNoCap 生成侧面，再额外添加顶部和底部的圆形面。
-    //   顶部和底部分别由圆心顶点和圆周上的顶点构成扇形三角形网格。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreateCylinder(float radius, float height, UINT slices, UINT stacks,
         float texU, float texV, const DirectX::XMFLOAT4 & color)
@@ -446,21 +400,6 @@ namespace Geometry
         return meshData;
     }
 
-    
-    // ----------------------------------------------------------
-    // CreateCylinderNoCap — 创建圆柱体侧面网格（无顶盖和底盖）
-    // 参数：
-    //   radius : 圆柱半径
-    //   height : 圆柱高度
-    //   slices : 圆周分割数
-    //   stacks : 高度方向分割数
-    //   texU, texV : 纹理坐标缩放
-    //   color  : 顶点颜色
-    // 说明：
-    //   按照"自底向上"的顺序逐层生成侧面顶点，
-    //   每层包含 (slices + 1) 个顶点（首尾重合以支持纹理环绕）。
-    //   索引按两个三角形构成一个四边形网格的方式排列。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreateCylinderNoCap(float radius, float height, UINT slices, UINT stacks,
         float texU, float texV, const DirectX::XMFLOAT4 & color)
@@ -518,17 +457,6 @@ namespace Geometry
         return meshData;
     }
 
-    // ----------------------------------------------------------
-    // CreateCone — 创建完整圆锥体网格（含底面）
-    // 参数：
-    //   radius : 底面半径
-    //   height : 圆锥高度
-    //   slices : 圆周分割数
-    //   color  : 顶点颜色
-    // 说明：
-    //   先调用 CreateConeNoCap 生成侧面，再添加底面圆形面。
-    //   底面由圆心和圆周上的顶点构成扇形三角形网格。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     MeshData<VertexType, IndexType> CreateCone(float radius, float height, UINT slices, const DirectX::XMFLOAT4& color)
     {
@@ -572,231 +500,6 @@ namespace Geometry
         return meshData;
     }
 
-
-    // ----------------------------------------------------------
-    // CreateCapsule — 创建胶囊体网格（上下半球 + 柱体/锥台）
-    // 参数：
-    //   topRadius    : 上半球半径
-    //   bottomRadius : 下半球半径
-    //   height       : 柱体部分高度（不含半球）
-    //   slices       : 经度方向切片数（圆周分割）
-    //   topLevels    : 上半球纬度层级数
-    //   bottomLevels : 下半球纬度层级数
-    //   color        : 顶点颜色
-    // 说明：
-    //   胶囊体由三部分组成：上半球（topLevels层）、柱体（height高度）、下半球（bottomLevels层）。
-    //   当 topRadius != bottomRadius 时，中间连接部分为锥台（frustum）。
-    //   在半球与柱体交界处复制顶点，以保证法线在棱线处正确断开。
-    //   纹理坐标 v 轴按三部分的高度比例分配：0(北极) → 1(南极)。
-    //   顶点包含位置、法线、切线、纹理坐标（由 VertexType 决定实际输出哪些属性）。
-    // ----------------------------------------------------------
-    template<class VertexType, class IndexType>
-    inline MeshData<VertexType, IndexType> CreateCapsule(float topRadius, float bottomRadius,
-        float height, UINT slices, UINT topLevels, UINT bottomLevels, const DirectX::XMFLOAT4& color)
-    {
-        using namespace DirectX;
-
-        MeshData<VertexType, IndexType> meshData;
-
-        float h2 = height / 2.0f;
-        float per_theta = XM_2PI / slices;
-        float per_phi_top = XM_PIDIV2 / topLevels;
-        float per_phi_bot = XM_PIDIV2 / bottomLevels;
-
-        // 纹理坐标 v 轴按三部分高度比例分配
-        float totalH = topRadius + height + bottomRadius;
-        float vCylBase = topRadius / totalH;           // 柱体顶部 v 值
-        float vBotBase = (topRadius + height) / totalH; // 柱体底部 v 值
-
-        // 柱体/锥台部分法线计算参数
-        float dr = bottomRadius - topRadius;
-        float slantLen = sqrtf(height * height + dr * dr);
-
-        // 顶点数 = 北极(1) + 上半球topLevels环 + 柱体2环 + 下半球bottomLevels环 + 南极(1)
-        UINT vertexCount = 2 + (topLevels + bottomLevels + 2) * (slices + 1);
-        // 索引数 = 6 * (topLevels + bottomLevels) * slices
-        UINT indexCount = 6 * (topLevels + bottomLevels) * slices;
-        meshData.vertexVec.resize(vertexCount);
-        meshData.indexVec.resize(indexCount);
-
-        Internal::VertexData vertexData;
-        UINT vIndex = 0, iIndex = 0;
-
-        // ===================== 上半球 =====================
-
-        // 北极顶点
-        vertexData = { XMFLOAT3(0.0f, h2 + topRadius, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f),
-            XMFLOAT4(1.0f, 0.0f, 0.0f, 1.0f), color, XMFLOAT2(0.0f, 0.0f) };
-        Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
-
-        // 上半球纬度环 i = 1..topLevels（phi 从 0 到 π/2）
-        for (UINT i = 1; i <= topLevels; ++i)
-        {
-            float phi = per_phi_top * i;
-            float sinPhi = sinf(phi), cosPhi = cosf(phi);
-            float v = vCylBase * (float)i / topLevels;
-
-            for (UINT j = 0; j <= slices; ++j)
-            {
-                float theta = per_theta * j;
-                float sinT = sinf(theta), cosT = cosf(theta);
-                float x = topRadius * sinPhi * cosT;
-                float y = h2 + topRadius * cosPhi;
-                float z = topRadius * sinPhi * sinT;
-
-                // 法线 = (pos - 球心) 归一化，球心在 (0, h2, 0)
-                XMFLOAT3 normal;
-                XMStoreFloat3(&normal, XMVector3Normalize(XMVectorSet(x, y - h2, z, 0.0f)));
-
-                vertexData = { XMFLOAT3(x, y, z), normal, XMFLOAT4(-sinT, 0.0f, cosT, 1.0f),
-                    color, XMFLOAT2(theta / XM_2PI, v) };
-                Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
-            }
-        }
-
-        // ===================== 柱体/锥台 =====================
-
-        // 柱体顶环 (y = +h2, 半径 = topRadius)
-        for (UINT j = 0; j <= slices; ++j)
-        {
-            float theta = per_theta * j;
-            float sinT = sinf(theta), cosT = cosf(theta);
-            // 锥台法线：考虑上下半径差异导致的倾斜
-            XMFLOAT3 normal(height * cosT / slantLen, dr / slantLen, height * sinT / slantLen);
-            vertexData = { XMFLOAT3(topRadius * cosT, h2, topRadius * sinT), normal,
-                XMFLOAT4(-sinT, 0.0f, cosT, 1.0f), color, XMFLOAT2(theta / XM_2PI, vCylBase) };
-            Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
-        }
-
-        // 柱体底环 (y = -h2, 半径 = bottomRadius)
-        for (UINT j = 0; j <= slices; ++j)
-        {
-            float theta = per_theta * j;
-            float sinT = sinf(theta), cosT = cosf(theta);
-            XMFLOAT3 normal(height * cosT / slantLen, dr / slantLen, height * sinT / slantLen);
-            vertexData = { XMFLOAT3(bottomRadius * cosT, -h2, bottomRadius * sinT), normal,
-                XMFLOAT4(-sinT, 0.0f, cosT, 1.0f), color, XMFLOAT2(theta / XM_2PI, vBotBase) };
-            Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
-        }
-
-        // ===================== 下半球 =====================
-
-        // 下半球纬度环 i = 0..bottomLevels-1（phi 从 π/2 到接近 π）
-        // Ring 0 为下半球赤道（与柱体底环位置相同但法线不同），Ring bottomLevels-1 为最后一道中间环
-        for (UINT i = 0; i < bottomLevels; ++i)
-        {
-            float phi = XM_PIDIV2 + per_phi_bot * i;
-            float sinPhi = sinf(phi), cosPhi = cosf(phi);
-            float v = vBotBase + (1.0f - vBotBase) * (float)i / bottomLevels;
-
-            for (UINT j = 0; j <= slices; ++j)
-            {
-                float theta = per_theta * j;
-                float sinT = sinf(theta), cosT = cosf(theta);
-                float x = bottomRadius * sinPhi * cosT;
-                float y = -h2 + bottomRadius * cosPhi;
-                float z = bottomRadius * sinPhi * sinT;
-
-                // 法线 = (pos - 球心) 归一化，球心在 (0, -h2, 0)
-                XMFLOAT3 normal;
-                XMStoreFloat3(&normal, XMVector3Normalize(XMVectorSet(x, y + h2, z, 0.0f)));
-
-                vertexData = { XMFLOAT3(x, y, z), normal, XMFLOAT4(-sinT, 0.0f, cosT, 1.0f),
-                    color, XMFLOAT2(theta / XM_2PI, v) };
-                Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
-            }
-        }
-
-        // 南极顶点
-        vertexData = { XMFLOAT3(0.0f, -h2 - bottomRadius, 0.0f), XMFLOAT3(0.0f, -1.0f, 0.0f),
-            XMFLOAT4(-1.0f, 0.0f, 0.0f, 1.0f), color, XMFLOAT2(0.0f, 1.0f) };
-        Internal::InsertVertexElement(meshData.vertexVec[vIndex++], vertexData);
-
-        // ===================== 索引生成 =====================
-
-        // --- 上半球顶帽 (北极 → 环1) ---
-        for (UINT j = 0; j < slices; ++j)
-        {
-            meshData.indexVec[iIndex++] = 0;
-            meshData.indexVec[iIndex++] = 1 + j + 1;
-            meshData.indexVec[iIndex++] = 1 + j;
-        }
-
-        // --- 上半球中间带 (环i → 环i+1), i = 1..topLevels-1 ---
-        for (UINT i = 1; i < topLevels; ++i)
-        {
-            UINT ringCurr = 1 + (i - 1) * (slices + 1);
-            UINT ringNext = 1 + i * (slices + 1);
-            for (UINT j = 0; j < slices; ++j)
-            {
-                meshData.indexVec[iIndex++] = ringCurr + j;
-                meshData.indexVec[iIndex++] = ringCurr + j + 1;
-                meshData.indexVec[iIndex++] = ringNext + j + 1;
-
-                meshData.indexVec[iIndex++] = ringCurr + j;
-                meshData.indexVec[iIndex++] = ringNext + j + 1;
-                meshData.indexVec[iIndex++] = ringNext + j;
-            }
-        }
-
-        // --- 柱体/锥台 (顶环 → 底环) ---
-        UINT cylTopStart = 1 + topLevels * (slices + 1);
-        UINT cylBotStart = cylTopStart + (slices + 1);
-        for (UINT j = 0; j < slices; ++j)
-        {
-            meshData.indexVec[iIndex++] = cylTopStart + j;
-            meshData.indexVec[iIndex++] = cylTopStart + j + 1;
-            meshData.indexVec[iIndex++] = cylBotStart + j + 1;
-
-            meshData.indexVec[iIndex++] = cylTopStart + j;
-            meshData.indexVec[iIndex++] = cylBotStart + j + 1;
-            meshData.indexVec[iIndex++] = cylBotStart + j;
-        }
-
-        // --- 下半球中间带 (环i → 环i+1), i = 0..bottomLevels-2 ---
-        // 下半球环 0（赤道）起始索引
-        UINT botEquatorStart = cylBotStart + (slices + 1);
-        for (UINT i = 0; i + 1 < bottomLevels; ++i)
-        {
-            UINT ringCurr = botEquatorStart + i * (slices + 1);
-            UINT ringNext = botEquatorStart + (i + 1) * (slices + 1);
-            for (UINT j = 0; j < slices; ++j)
-            {
-                meshData.indexVec[iIndex++] = ringCurr + j;
-                meshData.indexVec[iIndex++] = ringCurr + j + 1;
-                meshData.indexVec[iIndex++] = ringNext + j + 1;
-
-                meshData.indexVec[iIndex++] = ringCurr + j;
-                meshData.indexVec[iIndex++] = ringNext + j + 1;
-                meshData.indexVec[iIndex++] = ringNext + j;
-            }
-        }
-
-        // --- 下半球底帽 (最后一环 → 南极) ---
-        UINT southPole = vIndex - 1;
-        UINT lastRingStart = botEquatorStart + (bottomLevels - 1) * (slices + 1);
-        for (UINT j = 0; j < slices; ++j)
-        {
-            meshData.indexVec[iIndex++] = lastRingStart + j;
-            meshData.indexVec[iIndex++] = lastRingStart + j + 1;
-            meshData.indexVec[iIndex++] = southPole;
-        }
-
-        return meshData;
-    }
-
-    // ----------------------------------------------------------
-    // CreateConeNoCap — 创建圆锥体侧面网格（无底面）
-    // 参数：
-    //   radius : 底面半径
-    //   height : 圆锥高度
-    //   slices : 圆周分割数
-    //   color  : 顶点颜色
-    // 说明：
-    //   顶点分为两组：前 slices 个为尖端顶点（位置相同但法线/切线不同），
-    //   后 slices 个为底部圆周顶点。每个三角形由尖端的一个顶点和底部相邻两个顶点构成。
-    //   法线沿圆锥斜面方向（由底部指向尖端）。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     MeshData<VertexType, IndexType> CreateConeNoCap(float radius, float height, UINT slices, const DirectX::XMFLOAT4& color)
     {
@@ -845,31 +548,12 @@ namespace Geometry
         return meshData;
     }
 
-    // ----------------------------------------------------------
-    // Create2DShow — 创建 2D 屏幕空间四边形（使用 XMFLOAT2 版）
-    // 参数：
-    //   center : NDC 中心坐标
-    //   scale  : NDC 半尺寸
-    //   color  : 顶点颜色
-    // 说明：
-    //   委托给下面的 float 重载版本。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> Create2DShow(const DirectX::XMFLOAT2& center, const DirectX::XMFLOAT2 & scale, const DirectX::XMFLOAT4 & color)
     {
         return Create2DShow<VertexType, IndexType>(center.x, center.y, scale.x, scale.y, color);
     }
 
-    // ----------------------------------------------------------
-    // Create2DShow — 创建 2D 屏幕空间四边形（float 参数版）
-    // 参数：
-    //   centerX, centerY : NDC 中心坐标（范围 [-1, 1]）
-    //   scaleX, scaleY   : NDC 半尺寸
-    //   color            : 顶点颜色
-    // 说明：
-    //   在 NDC 空间中生成一个矩形四边形，用于 2D 全屏渲染或后处理。
-    //   顶点按逆时针顺序排列，纹理坐标覆盖整个 [0,1] 区间。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> Create2DShow(float centerX, float centerY, float scaleX, float scaleY, const DirectX::XMFLOAT4 & color)
     {
@@ -901,15 +585,6 @@ namespace Geometry
         return meshData;
     }
 
-    // ----------------------------------------------------------
-    // CreatePlane — 创建平面网格（XMFLOAT2 版）
-    // 参数：
-    //   planeSize   : 平面尺寸 (width, depth)
-    //   maxTexCoord : 最大纹理坐标 (u, v)
-    //   color       : 顶点颜色
-    // 说明：
-    //   委托给下面的 float 重载版本。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreatePlane(const DirectX::XMFLOAT2 & planeSize,
         const DirectX::XMFLOAT2 & maxTexCoord, const DirectX::XMFLOAT4 & color)
@@ -917,18 +592,6 @@ namespace Geometry
         return CreatePlane<VertexType, IndexType>(planeSize.x, planeSize.y, maxTexCoord.x, maxTexCoord.y, color);
     }
 
-    // ----------------------------------------------------------
-    // CreatePlane — 创建平面网格（float 参数版）
-    // 参数：
-    //   width  : X 轴方向宽度
-    //   depth  : Z 轴方向深度
-    //   texU   : 纹理 U 方向最大坐标
-    //   texV   : 纹理 V 方向最大坐标
-    //   color  : 顶点颜色
-    // 说明：
-    //   在 XZ 平面上（Y=0）生成长方形网格，法线朝上 (+Y)，
-    //   由 4 个顶点和 2 个三角形构成。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     inline MeshData<VertexType, IndexType> CreatePlane(float width, float depth, float texU, float texV, const DirectX::XMFLOAT4 & color)
     {
@@ -959,19 +622,6 @@ namespace Geometry
         meshData.indexVec = { 0, 1, 2, 2, 3, 0 };
         return meshData;
     }
-
-    // ----------------------------------------------------------
-    // CreateTerrain — 创建地形网格（XMFLOAT2/XMUINT2 版）
-    // 参数：
-    //   terrainSize  : 地形尺寸 (width, depth)
-    //   slices       : 分割数 (slicesX, slicesZ)
-    //   maxTexCoord  : 最大纹理坐标
-    //   heightFunc   : 高度函数 f(x, z) -> 高度 y
-    //   normalFunc   : 法线函数 f(x, z) -> 法线向量
-    //   colorFunc    : 颜色函数 f(x, z) -> 顶点颜色
-    // 说明：
-    //   委托给下面的 float 重载版本。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     MeshData<VertexType, IndexType> CreateTerrain(const DirectX::XMFLOAT2& terrainSize, const DirectX::XMUINT2& slices,
         const DirectX::XMFLOAT2& maxTexCoord, const std::function<float(float, float)>& heightFunc,
@@ -982,22 +632,6 @@ namespace Geometry
             maxTexCoord.x, maxTexCoord.y, heightFunc, normalFunc, colorFunc);
     }
 
-    // ----------------------------------------------------------
-    // CreateTerrain — 创建地形网格（float 参数版）
-    // 参数：
-    //   width      : X 轴方向宽度
-    //   depth      : Z 轴方向深度
-    //   slicesX    : X 方向分割数
-    //   slicesZ    : Z 方向分割数
-    //   texU, texV : 纹理坐标缩放
-    //   heightFunc : 高度函数 f(x, z) -> 高度 y
-    //   normalFunc : 法线函数 f(x, z) -> 法线向量
-    //   colorFunc  : 颜色函数 f(x, z) -> 顶点颜色
-    // 说明：
-    //   在 XZ 平面上生成规则网格，然后根据 heightFunc 调整每个顶点的 Y 值。
-    //   索引按两个三角形构成一个四边形网格的方式排列。
-    //   同时计算每点的法线（由 normalFunc 提供）和切线（由法线推导）。
-    // ----------------------------------------------------------
     template<class VertexType, class IndexType>
     MeshData<VertexType, IndexType> CreateTerrain(float width, float depth, UINT slicesX, UINT slicesZ,
         float texU, float texV, const std::function<float(float, float)>& heightFunc,
@@ -1071,4 +705,7 @@ namespace Geometry
 }
 
 
+
 #endif
+
+

@@ -32,6 +32,9 @@ if (${WIN7_SYSTEM})
 endif()
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
+# 引入当前目录下的 Common 头文件目录
+include_directories(Common)
+
 # 拷贝着色器目录到输出目录
 file(COPY ${HLSL_DIR} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 # 新增：拷贝纹理目录到输出目录
@@ -40,20 +43,26 @@ file(COPY Texture DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 # 收集当前目录下的源码、头文件以及 HLSL 目录下的着色器文件
 file(GLOB HLSL_FILES ${HLSL_DIR}/*.hlsl ${HLSL_DIR}/*.hlsli)
 file(GLOB HEADER_FILES ./*.h)
+# 收集当前目录 Common 下的代码文件，精确匹配后缀，避免混入奇怪的文件
+file(GLOB COMMON_FILES Common/*.cpp Common/*.h Common/*.hpp Common/*.inl)
 
 aux_source_directory(. DIR_SRCS)
 
 # 创建可执行文件并链接库 (直接将HLSL_FILES放入可执行文件，确保不管是否开启静态编译，在IDE中都始终可见)
-add_executable(${TARGET_NAME} WIN32 ${DIR_SRCS} ${HEADER_FILES} ${HLSL_FILES})
+add_executable(${TARGET_NAME} WIN32 ${DIR_SRCS} ${HEADER_FILES} ${HLSL_FILES} ${COMMON_FILES})
 target_link_libraries(${TARGET_NAME} d3d11.lib dxgi.lib dxguid.lib D3DCompiler.lib winmm.lib d2d1.lib dwrite.lib)
 
 # 在 IDE 中对 HLSL 文件进行分组显示
 source_group("HLSL Files" FILES ${HLSL_FILES})
+# 在 IDE 中对 Common 文件进行分组显示
+source_group("Common" FILES ${COMMON_FILES})
 
 # 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
 set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "Lighting")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
+# 设置解决方案中的 FOLDER 分组
+set_target_properties(${TARGET_NAME} PROPERTIES FOLDER "Project 10-17")
 
 # ------------------------------------------------------------------------------
 # 可选功能模块配置
@@ -61,7 +70,6 @@ set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
 
 # 着色器静态编译
 if (${SHADER_STATIC_COMPILE})
-    # 已将 target_sources 移除，因为上方 add_executable 已经包含了 HLSL_FILES
     foreach(HLSL_FILE ${HLSL_FILES})
         get_filename_component(HLSL_FDIR ${HLSL_FILE} DIRECTORY)
         get_filename_component(HLSL_FBASENAME_WE ${HLSL_FILE} NAME_WE)
