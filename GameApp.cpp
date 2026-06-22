@@ -86,7 +86,9 @@ void GameApp::UpdateScene(float dt)
                 // 设置采样器
                 m_pd3dImmediateContext->PSSetSamplers(0, 1, m_pSamplerState.GetAddressOf());
                 // 只需绑定一次纹理数组 SRV，后续通过 fireFrame 切换帧
-                m_pd3dImmediateContext->PSSetShaderResources(0, 1, m_pFireAnimArray.GetAddressOf());
+                m_pd3dImmediateContext->PSSetShaderResources(0, 1, 
+                    m_pFireAnimArray.GetAddressOf()     // 绑定到t0，也就是HLSL 的g_FireTex ，
+                );
             }
             else
             {
@@ -312,7 +314,7 @@ bool GameApp::InitResource()
     arrayDesc.MipLevels = 1;
     arrayDesc.ArraySize = 120;
     arrayDesc.Format = firstDesc.Format;
-    arrayDesc.SampleDesc.Count = 1;
+    arrayDesc.SampleDesc.Count = 1;         // 不开启多重采样抗锯齿（MSAA）
     arrayDesc.Usage = D3D11_USAGE_DEFAULT;
     arrayDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
@@ -356,6 +358,7 @@ bool GameApp::InitResource()
     srvDesc.Texture2DArray.MipLevels = 1;
     srvDesc.Texture2DArray.FirstArraySlice = 0;
     srvDesc.Texture2DArray.ArraySize = 120;
+    
     HR(m_pd3dDevice->CreateShaderResourceView(pFireAnimTex.Get(), &srvDesc, m_pFireAnimArray.GetAddressOf()));
 
     // 初始化 Flare 纹理（flare.dds 和 flarealpha.dds）
