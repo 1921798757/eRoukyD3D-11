@@ -61,8 +61,6 @@ source_group("Common" FILES ${COMMON_FILES})
 set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "Lighting")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
-# 设置解决方案中的 FOLDER 分组
-set_target_properties(${TARGET_NAME} PROPERTIES FOLDER "Project 10-17")
 
 # ------------------------------------------------------------------------------
 # 可选功能模块配置

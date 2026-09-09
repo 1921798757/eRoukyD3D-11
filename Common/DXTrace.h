@@ -41,8 +41,9 @@ HRESULT WINAPI DXTraceW(_In_z_ const WCHAR* strFile, _In_ DWORD dwLine, _In_ HRE
     }
     #endif
 #else
+// Release模式下不做任何处理
     #ifndef HR
-    #define HR(x) (x)
+    #define HR(x) (x)   // 把HR(x) 替换成 (x)，不做任何处理
     #endif 
 #endif
 
