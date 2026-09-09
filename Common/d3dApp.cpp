@@ -5,24 +5,37 @@
 
 #pragma warning(disable: 6031)
 
-extern "C"
+extern "C"//extern:请按标准 C 语言规则处理括号内的符号，不要做任何名称修饰（Name Mangling），保持原名输出
 {
     // 在具有多显卡的硬件设备中，优先使用NVIDIA或AMD的显卡运行
     // 需要在.exe中使用
     __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
     __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 0x00000001;
+
+    //__declspec(dllexport):把这个变量（或函数）的名字和地址，公开发布到生成文件的‘导出表’
+    //（Export Directory / Export Table）里，允许外部模块来查找和使用。
 }
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+//这里的 extern 是 C/C++ 的关键字，意思是 “外部声明”（External Declaration）。
+//这个函数在别的文件里已经实现（定义）了，我当前的文件只是提前打个招呼引用一下，
+//编译时直接放行，等最后链接（Link）的时候再去把它们连起来。
 
 namespace
 {
     // This is just used to forward Windows messages from a global window
     // procedure to our member function window procedure because we cannot
     // assign a member function to WNDCLASS::lpfnWndProc.
+    //将大括号内的变量或函数限制在当前 .cpp 文件内部使用
+    //防止全局命名污染和多文件符号冲突。其他 .cpp 文件即使定义了同名的 g_pd3dApp，链接时也不会报错。
     D3DApp* g_pd3dApp = nullptr;
 }
 
+
+
+//这里主要是声明一个普通的全局函数，因为类的成员函数是不能直接作为回调函数的（因为成员函数有一个隐藏的 this 指针参数），
+//所以我们需要一个全局函数来转发消息到 D3DApp 类的成员函数中去。
+//这里类的成员函数就是 D3DApp::MsgProc，而全局函数 MainWndProc 就是用来转发消息的。
 LRESULT CALLBACK
 MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -207,9 +220,13 @@ void D3DApp::OnResize()
     m_ScreenViewport.MinDepth = 0.0f;
     m_ScreenViewport.MaxDepth = 1.0f;
 
+
+    // 这里的RSSetViewPorts是对GPU硬件（光栅化阶段）下达的硬性指令。
+    // 而GameApp::OnResize()里的camera->SetViewPort()只是把这套同样的参数存储在了摄像机类的成员变量里，方便后续计算投影矩阵和视口变换矩阵。
     m_pd3dImmediateContext->RSSetViewports(1, &m_ScreenViewport);
 
     // 设置调试对象名
+    //D3D11SetDebugObjectName 的作用就是给 GPU 显存中的底层资源打上一个人类可读的“名字标签”（备注名）
     D3D11SetDebugObjectName(m_pDepthStencilBuffer.Get(), "DepthStencilBuffer");
     D3D11SetDebugObjectName(m_pDepthStencilView.Get(), "DepthStencilView");
     D3D11SetDebugObjectName(m_pRenderTargetView.Get(), "BackBufferRTV[0]");
@@ -448,20 +465,30 @@ bool D3DApp::InitDirect3D()
 
 
 
+    //Direct3D 负责绘图，而 DXGI 负责底层硬件资源（显卡枚举、交换链呈现）
+    //从现有的 Direct3D 设备反查出创建它的 DXGI 工厂，并检测系统是否支持 DirectX 11.1 特性。
+    //Direct3D 11 构建在 DXGI（DirectX Graphics Infrastructure）之上。
+    //DXGI 负责枚举显卡以及管理呈现画面的“交换链”（Swap Chain）。
+    //D3D Device    --查询接口-->   DXGI Device  --查询适配器-->  DXGI Adapter(显卡)  --查询父对象-->  DXGI Factory (工厂)
     ComPtr<IDXGIDevice> dxgiDevice = nullptr;
     ComPtr<IDXGIAdapter> dxgiAdapter = nullptr;
     ComPtr<IDXGIFactory1> dxgiFactory1 = nullptr;	// D3D11.0(包含DXGI1.1)的接口类
     ComPtr<IDXGIFactory2> dxgiFactory2 = nullptr;	// D3D11.1(包含DXGI1.2)特有的接口类
 
+
     // 为了正确创建 DXGI交换链，首先我们需要获取创建 D3D设备 的 DXGI工厂，否则会引发报错：
+    // 谁生的设备，就必须由谁的工厂来建交换链。
     // "IDXGIFactory::CreateSwapChain: This function is being called with a device from a different IDXGIFactory."
-    HR(m_pd3dDevice.As(&dxgiDevice));
-    HR(dxgiDevice->GetAdapter(dxgiAdapter.GetAddressOf()));
+    HR(m_pd3dDevice.As(&dxgiDevice));   //相当于把m_pd3dDevice转换成IDXGIDevice接口，存在dxgiDevice里，方便之后使用
+    HR(dxgiDevice->GetAdapter(dxgiAdapter.GetAddressOf())); //让 dxgiDevice 去找到它运行在哪个显卡（Adapter）上，然后把显卡接口存入 dxgiAdapter 中 
     HR(dxgiAdapter->GetParent(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(dxgiFactory1.GetAddressOf())));
+    //向显卡（dxgiAdapter）询问它的“父级”是谁，从而获取创建它的 DXGI 工厂（Factory），并将结果存入 dxgiFactory1
+    //__uuidof(...) 是 MSVC 编译器的内置关键字。每个 COM 接口都有一个独一无二的全局唯一标识符（GUID / IID）。
+    //这句代码是在告诉 COM 体系：“我知道你的父对象是IDXGIFactory，请把它当作 IDXGIFactory1 这种接口规格打包给我”。
 
     // 查看该对象是否包含IDXGIFactory2接口
     hr = dxgiFactory1.As(&dxgiFactory2);
-    // 如果包含，则说明支持D3D11.1
+    // 如果包含，则说明支持D3D11.1，这里是D3D11.1的创建交换链方式
     if (dxgiFactory2 != nullptr)
     {
         HR(m_pd3dDevice.As(&m_pd3dDevice1));
@@ -469,8 +496,23 @@ bool D3DApp::InitDirect3D()
         // 填充各种结构体用以描述交换链
         DXGI_SWAP_CHAIN_DESC1 sd;
         ZeroMemory(&sd, sizeof(sd));
-        sd.Width = m_ClientWidth;
-        sd.Height = m_ClientHeight;
+
+        //交换链（Swap Chain）本身并不管理窗口的大小，它管理的是“后台缓冲区（Back Buffer）的大小”。
+        //窗口的大小是由 Windows 操作系统（Win32 窗口管理器 / DWM） 管理的。代码中之所以把 m_ClientWidth 和 
+        //m_ClientHeight 传给交换链，是为了让交换链内部的“画布像素分辨率”与“外部窗口显示区域”精准对齐
+
+        /*
+        Win32 窗口大小（操作系统管）：
+        通过 CreateWindowEx 或 SetWindowPos 决定，指的是操作系统桌面上这个窗口物理上占用了多大面积（即客户区宽高 m_ClientWidth / m_ClientHeight）。
+        交换链大小（DirectX 管）：
+        交换链本质上是一个或多个纹理（Texture / 内存里的二维像素阵列）。sd.Width 和 sd.Height 指定的是这张纹理到底由多少个像素构成。
+        */
+        sd.Width = m_ClientWidth;//如果设为 0，DirectX 驱动会自动调用 Win32 API（如 GetClientRect）去获取传入窗口句柄（m_hMainWnd）的当前客户区尺寸，自动匹配。
+        sd.Height = m_ClientHeight;//你的程序在消息回调中拿到新的窗口宽高，更新 m_ClientWidth 和 m_ClientHeight
+        //调用 m_pSwapChain->ResizeBuffers(..., m_ClientWidth, m_ClientHeight, ...) 通知交换链：“窗口变大了，把后台那几张纹理也重新分配为这个新尺寸”。
+        //重新创建 RTV 并继续渲染。
+
+
 #ifdef USE_IMGUI
         sd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 #else
@@ -502,7 +544,7 @@ bool D3DApp::InitDirect3D()
         HR(dxgiFactory2->CreateSwapChainForHwnd(m_pd3dDevice.Get(), m_hMainWnd, &sd, &fd, nullptr, m_pSwapChain1.GetAddressOf()));
         HR(m_pSwapChain1.As(&m_pSwapChain));
     }
-    else
+    else    //这里是D3D11.0的创建交换链方式
     {
         // 填充DXGI_SWAP_CHAIN_DESC用以描述交换链
         DXGI_SWAP_CHAIN_DESC sd;
