@@ -57,6 +57,7 @@ bool GameApp::Init()
 void GameApp::OnResize()
 {
     D3DApp::OnResize();
+    m_CBuffer.proj = XMMatrixTranspose(XMMatrixPerspectiveFovLH(XM_PIDIV2, AspectRatio(), 1.0f, 1000.0f));
 }
 
 void GameApp::UpdateScene(float dt)
@@ -103,7 +104,7 @@ void GameApp::DrawScene()
     m_pd3dImmediateContext->ClearDepthStencilView(
         m_pDepthStencilView.Get(),
          D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 
-         1.0f,      // 这是给深度缓冲区（Z-Buffer）设定的初始值。
+         1.0f,      // 这是给深度缓冲区（Z-Buffer）设定的初始值。 
          0);        // 这是给模板缓冲区（Stencil Buffer）设定的初始值。
 
     
@@ -283,6 +284,10 @@ bool GameApp::InitResource()
         XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f),
         XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f)
     ));
+
+    // 计算投影矩阵，设置常量缓冲区的proj成员变量，但是透视投影这里只计算了一次，
+    // 没有在UpdateScene里每帧都计算，因为投影矩阵通常不需要每帧更新，除非窗口大小发生变化或者需要动态调整视野角度等参数。
+    // 我们需要去OnResize里修改投影矩阵，保证在窗口大小变化时，投影矩阵能够正确反映新的宽高比，从而避免画面被拉伸或压缩。
     m_CBuffer.proj = XMMatrixTranspose(XMMatrixPerspectiveFovLH(XM_PIDIV2, AspectRatio(), 1.0f, 1000.0f));
     // XMMatrixPerspectiveFovLH 投影 / 镜头矩阵
     // PerspectiveFovLH的意思是：构建一个Left-Handed坐标系下的透视镜头（Field of View）镜头。
