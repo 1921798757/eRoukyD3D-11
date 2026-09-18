@@ -37,6 +37,59 @@ DirectX::XMVECTOR Transform::GetPositionXM() const
     return XMLoadFloat3(&m_Position);
 }
 
+XMFLOAT3 Transform::GetWorldPosition() const
+{
+    XMFLOAT3 res;
+    XMStoreFloat3(&res, GetWorldPositionXM());
+    return res;
+}
+
+DirectX::XMVECTOR Transform::GetWorldPositionXM() const
+{
+    // 世界矩阵的平移分量即世界空间位置
+    XMMATRIX World = GetLocalToWorldMatrixXM();
+    return World.r[3];
+}
+
+XMFLOAT3 Transform::GetWorldRightAxis() const
+{
+    XMFLOAT3 res;
+    XMStoreFloat3(&res, GetWorldRightAxisXM());
+    return res;
+}
+
+DirectX::XMVECTOR Transform::GetWorldRightAxisXM() const
+{
+    XMMATRIX World = GetLocalToWorldMatrixXM();
+    return XMVector3Normalize(World.r[0]);
+}
+
+XMFLOAT3 Transform::GetWorldUpAxis() const
+{
+    XMFLOAT3 res;
+    XMStoreFloat3(&res, GetWorldUpAxisXM());
+    return res;
+}
+
+DirectX::XMVECTOR Transform::GetWorldUpAxisXM() const
+{
+    XMMATRIX World = GetLocalToWorldMatrixXM();
+    return XMVector3Normalize(World.r[1]);
+}
+
+XMFLOAT3 Transform::GetWorldForwardAxis() const
+{
+    XMFLOAT3 res;
+    XMStoreFloat3(&res, GetWorldForwardAxisXM());
+    return res;
+}
+
+DirectX::XMVECTOR Transform::GetWorldForwardAxisXM() const
+{
+    XMMATRIX World = GetLocalToWorldMatrixXM();
+    return XMVector3Normalize(World.r[2]);
+}
+
 XMFLOAT3 Transform::GetRightAxis() const
 {
     XMMATRIX R = XMMatrixRotationRollPitchYawFromVector(XMLoadFloat3(&m_Rotation));
@@ -91,8 +144,13 @@ XMMATRIX Transform::GetLocalToWorldMatrixXM() const
     XMVECTOR scaleVec = XMLoadFloat3(&m_Scale);
     XMVECTOR rotationVec = XMLoadFloat3(&m_Rotation);
     XMVECTOR positionVec = XMLoadFloat3(&m_Position);
-    XMMATRIX World = XMMatrixScalingFromVector(scaleVec) * XMMatrixRotationRollPitchYawFromVector(rotationVec) * XMMatrixTranslationFromVector(positionVec);
-    return World;
+    // 先得到自身的局部变换矩阵(相对父节点)
+    XMMATRIX Local = XMMatrixScalingFromVector(scaleVec) * XMMatrixRotationRollPitchYawFromVector(rotationVec) * XMMatrixTranslationFromVector(positionVec);
+    // 无父节点时局部矩阵即世界矩阵；
+    // 有父节点时，局部矩阵乘上父节点的世界矩阵，逐级向上合成到世界空间
+    if (m_pParent)
+        return Local * m_pParent->GetLocalToWorldMatrixXM();
+    return Local;
 }
 
 XMFLOAT4X4 Transform::GetWorldToLocalMatrix() const
@@ -193,6 +251,16 @@ void Transform::LookTo(const XMFLOAT3& direction, const XMFLOAT3& up)
     XMFLOAT4X4 rotMatrix;
     XMStoreFloat4x4(&rotMatrix, InvView);
     m_Rotation = GetEulerAnglesFromRotationMatrix(rotMatrix);
+}
+
+void Transform::SetParent(Transform* parent)
+{
+    m_pParent = parent;
+}
+
+Transform* Transform::GetParent() const
+{
+    return m_pParent;
 }
 
 XMFLOAT3 Transform::GetEulerAnglesFromRotationMatrix(const XMFLOAT4X4& rotationMatrix)

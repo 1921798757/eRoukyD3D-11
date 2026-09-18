@@ -24,6 +24,10 @@ public:
     Transform(Transform&&) = default;
     Transform& operator=(Transform&&) = default;
 
+    // 注意：下面GetScale/GetRotation/GetPosition等接口返回的都是【局部值】，
+    // 即相对父节点的变换。若设置了父节点，它们不再是世界空间中的值，
+    // 世界空间的值请使用GetWorldPosition等接口获取
+
     // 获取对象缩放比例
     DirectX::XMFLOAT3 GetScale() const;
     // 获取对象缩放比例
@@ -40,6 +44,26 @@ public:
     DirectX::XMFLOAT3 GetPosition() const;
     // 获取对象位置
     DirectX::XMVECTOR GetPositionXM() const;
+
+    // 获取对象在世界空间中的位置
+    DirectX::XMFLOAT3 GetWorldPosition() const;
+    // 获取对象在世界空间中的位置
+    DirectX::XMVECTOR GetWorldPositionXM() const;
+
+    // 获取对象在世界空间中的右方向轴(已归一化)
+    DirectX::XMFLOAT3 GetWorldRightAxis() const;
+    // 获取对象在世界空间中的右方向轴(已归一化)
+    DirectX::XMVECTOR GetWorldRightAxisXM() const;
+
+    // 获取对象在世界空间中的上方向轴(已归一化)
+    DirectX::XMFLOAT3 GetWorldUpAxis() const;
+    // 获取对象在世界空间中的上方向轴(已归一化)
+    DirectX::XMVECTOR GetWorldUpAxisXM() const;
+
+    // 获取对象在世界空间中的前方向轴(已归一化)
+    DirectX::XMFLOAT3 GetWorldForwardAxis() const;
+    // 获取对象在世界空间中的前方向轴(已归一化)
+    DirectX::XMVECTOR GetWorldForwardAxisXM() const;
 
     // 获取右方向轴
     DirectX::XMFLOAT3 GetRightAxis() const;
@@ -101,10 +125,18 @@ public:
     // 从旋转矩阵获取旋转欧拉角
     static DirectX::XMFLOAT3 GetEulerAnglesFromRotationMatrix(const DirectX::XMFLOAT4X4& rotationMatrix);
 
+    // 设置父变换
+    // 此后本节点的Scale/Rotation/Position均为相对父节点的局部变换，
+    // 世界矩阵 = 局部矩阵 * 父节点世界矩阵(递归向上合成)
+    void SetParent(Transform* parent);
+    // 获取父变换
+    Transform* GetParent() const;
+
 private:
     DirectX::XMFLOAT3 m_Scale = { 1.0f, 1.0f, 1.0f };				// 缩放
     DirectX::XMFLOAT3 m_Rotation = {};								// 旋转欧拉角(弧度制)
     DirectX::XMFLOAT3 m_Position = {};								// 位置
+    Transform* m_pParent = nullptr;									// 父变换(不拥有其生命周期)
 };
 
 #endif

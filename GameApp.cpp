@@ -110,6 +110,9 @@ void GameApp::UpdateScene(float dt)
 
     Transform& woodCrateTransform = m_WoodCrate.GetTransform();
 
+    // 木盒绕自身Y轴缓慢自转，挂在它下面的子盒子会跟随公转，直观演示父子变换
+    woodCrateTransform.RotateAxis(XMFLOAT3(0.0f, 1.0f, 0.0f), dt * 0.5f);
+
     ImGuiIO& io = ImGui::GetIO();
     if (m_CameraMode == CameraMode::FirstPerson || m_CameraMode == CameraMode::Free)
     {
@@ -283,11 +286,10 @@ void GameApp::DrawScene()
 
     //
     // 绘制几何模型
+    // 子盒子会随木盒递归绘制，墙体也会随地板递归绘制，无需单独调用
     //
     m_WoodCrate.Draw(m_pd3dImmediateContext.Get());
     m_Floor.Draw(m_pd3dImmediateContext.Get());
-    for (auto& wall : m_Walls)
-        wall.Draw(m_pd3dImmediateContext.Get());
 
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
@@ -364,8 +366,7 @@ bool GameApp::InitResource()
     m_Floor.GetTransform().SetPosition(0.0f, -1.0f, 0.0f);
     
     
-    // 初始化墙体,resize是vector的成员函数，作用是改变容器中元素的个数
-    m_Walls.resize(4);
+    // 初始化墙体
     HR(CreateDDSTextureFromFile(m_pd3dDevice.Get(), L"..\\Texture\\brick.dds", nullptr, texture.ReleaseAndGetAddressOf()));
     // 这里控制墙体四个面的生成
     for (int i = 0; i < 4; ++i)
@@ -374,8 +375,25 @@ bool GameApp::InitResource()
             Geometry::CreatePlane(XMFLOAT2(20.0f, 8.0f), XMFLOAT2(5.0f, 1.5f)));
         Transform& transform = m_Walls[i].GetTransform();
         transform.SetRotation(-XM_PIDIV2, XM_PIDIV2 * i, 0.0f);
-        transform.SetPosition(i % 2 ? -10.0f * (i - 2) : 0.0f, 3.0f, i % 2 == 0 ? -10.0f * (i - 1) : 0.0f);
+        // 墙体作为地板的子对象，这里的位置是相对地板的局部坐标
+        // 地板位于(0,-1,0)，原本世界坐标y=3对应局部坐标y=4
+        transform.SetPosition(i % 2 ? -10.0f * (i - 2) : 0.0f, 4.0f, i % 2 == 0 ? -10.0f * (i - 1) : 0.0f);
         m_Walls[i].SetTexture(texture.Get());
+        // 建立父子关系：墙 -> 地板
+        m_Floor.AddChild(&m_Walls[i]);
+    }
+
+    // 初始化子盒子，作为木盒的子对象，用于演示父子变换
+    for (int i = 0; i < 3; ++i)
+    {
+        m_ChildCrates[i].SetBuffer(m_pd3dDevice.Get(), Geometry::CreateBox(1.0f, 1.0f, 1.0f));
+        m_ChildCrates[i].SetTexture(texture.Get());
+        Transform& transform = m_ChildCrates[i].GetTransform();
+        // 子盒子的位置是相对木盒的局部坐标，均匀分布在木盒周围
+        float angle = i * XM_2PI / 3.0f;
+        transform.SetPosition(2.5f * cosf(angle), 0.5f + 0.5f * i, 2.5f * sinf(angle));
+        // 建立父子关系：子盒子 -> 木盒
+        m_WoodCrate.AddChild(&m_ChildCrates[i]);
     }
         
     // 初始化采样器状态
@@ -500,6 +518,9 @@ bool GameApp::InitResource()
     m_Walls[1].SetDebugObjectName("Walls[1]");
     m_Walls[2].SetDebugObjectName("Walls[2]");
     m_Walls[3].SetDebugObjectName("Walls[3]");
+    m_ChildCrates[0].SetDebugObjectName("ChildCrates[0]");
+    m_ChildCrates[1].SetDebugObjectName("ChildCrates[1]");
+    m_ChildCrates[2].SetDebugObjectName("ChildCrates[2]");
 
 
     return true;
@@ -510,6 +531,16 @@ GameApp::GameObject::GameObject()
 {
 }
 
+GameApp::GameObject::~GameObject()
+{
+    // 析构时解除与父对象的双向关系，避免父对象持有悬空指针
+    if (m_pParent)
+    {
+        auto& siblings = m_pParent->m_Children;
+        siblings.erase(std::remove(siblings.begin(), siblings.end(), this), siblings.end());
+    }
+}
+
 Transform& GameApp::GameObject::GetTransform()
 {
     return m_Transform;
@@ -518,6 +549,50 @@ Transform& GameApp::GameObject::GetTransform()
 const Transform& GameApp::GameObject::GetTransform() const
 {
     return m_Transform;
+}
+
+GameApp::GameObject* GameApp::GameObject::GetParent() const
+{
+    return m_pParent;
+}
+
+void GameApp::GameObject::SetParent(GameObject* parent)
+{
+    if (m_pParent == parent)
+        return;
+
+    // 先从旧父对象中移除
+    if (m_pParent)
+    {
+        auto& siblings = m_pParent->m_Children;
+        siblings.erase(std::remove(siblings.begin(), siblings.end(), this), siblings.end());
+    }
+
+    m_pParent = parent;
+
+    // 加入新父对象的子对象列表
+    if (m_pParent)
+        m_pParent->m_Children.push_back(this);
+
+    // 同步Transform的父子关系，世界矩阵将据此逐级向上合成
+    m_Transform.SetParent(parent ? &parent->m_Transform : nullptr);
+}
+
+const std::vector<GameApp::GameObject*>& GameApp::GameObject::GetChildren() const
+{
+    return m_Children;
+}
+
+void GameApp::GameObject::AddChild(GameObject* child)
+{
+    if (child)
+        child->SetParent(this);
+}
+
+void GameApp::GameObject::RemoveChild(GameObject* child)
+{
+    if (child && child->m_pParent == this)
+        child->SetParent(nullptr);
 }
 
 template<class VertexType, class IndexType>
@@ -562,32 +637,41 @@ void GameApp::GameObject::SetTexture(ID3D11ShaderResourceView * texture)
 
 void GameApp::GameObject::Draw(ID3D11DeviceContext * deviceContext)
 {
-    // 设置顶点/索引缓冲区
-    UINT strides = m_VertexStride;
-    UINT offsets = 0;
-    deviceContext->IASetVertexBuffers(0, 1, m_pVertexBuffer.GetAddressOf(), &strides, &offsets);
-    deviceContext->IASetIndexBuffer(m_pIndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
+    // 仅当该对象拥有有效网格数据时才绘制自身
+    if (m_pVertexBuffer && m_pIndexBuffer)
+    {
+        // 设置顶点/索引缓冲区
+        UINT strides = m_VertexStride;
+        UINT offsets = 0;
+        deviceContext->IASetVertexBuffers(0, 1, m_pVertexBuffer.GetAddressOf(), &strides, &offsets);
+        deviceContext->IASetIndexBuffer(m_pIndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
 
-    // 获取之前已经绑定到渲染管线上的常量缓冲区并进行修改
-    ComPtr<ID3D11Buffer> cBuffer = nullptr;
-    deviceContext->VSGetConstantBuffers(0, 1, cBuffer.GetAddressOf());
-    CBChangesEveryDrawing cbDrawing;
+        // 获取之前已经绑定到渲染管线上的常量缓冲区并进行修改
+        ComPtr<ID3D11Buffer> cBuffer = nullptr;
+        deviceContext->VSGetConstantBuffers(0, 1, cBuffer.GetAddressOf());
+        CBChangesEveryDrawing cbDrawing;
 
-    // 内部进行转置
-    XMMATRIX W = m_Transform.GetLocalToWorldMatrixXM();
-    cbDrawing.world = XMMatrixTranspose(W);
-    cbDrawing.worldInvTranspose = XMMatrixTranspose(InverseTranspose(W));
+        // 内部进行转置
+        // GetLocalToWorldMatrixXM会自动将局部矩阵与父节点世界矩阵逐级合成
+        XMMATRIX W = m_Transform.GetLocalToWorldMatrixXM();
+        cbDrawing.world = XMMatrixTranspose(W);
+        cbDrawing.worldInvTranspose = XMMatrixTranspose(InverseTranspose(W));
 
-    // 更新常量缓冲区
-    D3D11_MAPPED_SUBRESOURCE mappedData;
-    HR(deviceContext->Map(cBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
-    memcpy_s(mappedData.pData, sizeof(CBChangesEveryDrawing), &cbDrawing, sizeof(CBChangesEveryDrawing));
-    deviceContext->Unmap(cBuffer.Get(), 0);
+        // 更新常量缓冲区
+        D3D11_MAPPED_SUBRESOURCE mappedData;
+        HR(deviceContext->Map(cBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
+        memcpy_s(mappedData.pData, sizeof(CBChangesEveryDrawing), &cbDrawing, sizeof(CBChangesEveryDrawing));
+        deviceContext->Unmap(cBuffer.Get(), 0);
 
-    // 设置纹理
-    deviceContext->PSSetShaderResources(0, 1, m_pTexture.GetAddressOf());
-    // 可以开始绘制
-    deviceContext->DrawIndexed(m_IndexCount, 0, 0);
+        // 设置纹理
+        deviceContext->PSSetShaderResources(0, 1, m_pTexture.GetAddressOf());
+        // 可以开始绘制
+        deviceContext->DrawIndexed(m_IndexCount, 0, 0);
+    }
+
+    // 递归绘制所有子对象
+    for (auto& child : m_Children)
+        child->Draw(deviceContext);
 }
 
 void GameApp::GameObject::SetDebugObjectName(const std::string& name)
