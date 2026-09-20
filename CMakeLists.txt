@@ -4,9 +4,9 @@ cmake_minimum_required (VERSION 3.14)
 # 用户配置
 # ------------------------------------------------------------------------------
 # 设置解决方案名
-project("11_Blending")
+project("12_DepthStencilMirror")
 # 设置项目名(不能有空格) 
-set(TARGET_NAME "11_Blending")
+set(TARGET_NAME "12_DepthStencilMirror")
 # 设置HLSL文件的存放位置
 set(HLSL_DIR "HLSL")
 # Win7系统设置为ON
@@ -58,10 +58,10 @@ source_group("HLSL Files" FILES ${HLSL_FILES})
 source_group("Common" FILES ${COMMON_FILES})
 
 # 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
-set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "11 Blending")
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "12 Depth and Stenciling")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
-set_target_properties(${TARGET_NAME} PROPERTIES FOLDER "Project 10-17")
+
 
 # ------------------------------------------------------------------------------
 # 可选功能模块配置
