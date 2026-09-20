@@ -3,6 +3,10 @@
 // 像素着色器(3D)
 float4 PS(VertexPosHWNormalTex pIn) : SV_Target
 {
+    // 提前进行Alpha裁剪，对不符合要求的像素可以避免后续运算
+    float4 texColor = g_Tex.Sample(g_SamLinear, pIn.tex);
+    clip(texColor.a - 0.1f);
+
     // 标准化法向量
     pIn.normalW = normalize(pIn.normalW);
 
@@ -43,9 +47,8 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
     }
     
 
-    float4 texColor = g_Tex.Sample(g_SamLinear, pIn.tex);
+    
     float4 litColor = texColor * (ambient + diffuse) + spec;
     litColor.a = texColor.a * g_Material.diffuse.a;
-    
     return litColor;
 }

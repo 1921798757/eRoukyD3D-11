@@ -5,6 +5,7 @@
 #include <Geometry.h>
 #include <LightHelper.h>
 #include <Camera.h>
+#include <RenderStates.h>
 
 class GameApp : public D3DApp
 {
@@ -14,12 +15,13 @@ public:
     {
         DirectX::XMMATRIX world;
         DirectX::XMMATRIX worldInvTranspose;
+        Material material;
     };
 
     struct CBChangesEveryFrame
     {
         DirectX::XMMATRIX view;
-        DirectX::XMFLOAT4 eyePos;
+        DirectX::XMVECTOR eyePos;
     };
 
     struct CBChangesOnResize
@@ -32,11 +34,10 @@ public:
         DirectionalLight dirLight[10];
         PointLight pointLight[10];
         SpotLight spotLight[10];
-        Material material;
         int numDirLight;
         int numPointLight;
         int numSpotLight;
-        float pad;		// 打包保证16字节对齐
+        int pad;
     };
 
     // 一个尽可能小的游戏对象类
@@ -52,18 +53,21 @@ public:
 
         // 设置缓冲区
         template<class VertexType, class IndexType>
-        void SetBuffer(ID3D11Device * device, const Geometry::MeshData<VertexType, IndexType>& meshData);
+        void SetBuffer(ID3D11Device* device, const Geometry::MeshData<VertexType, IndexType>& meshData);
         // 设置纹理
-        void SetTexture(ID3D11ShaderResourceView * texture);
+        void SetTexture(ID3D11ShaderResourceView* texture);
+        // 设置材质
+        void SetMaterial(const Material& material);
 
         // 绘制
-        void Draw(ID3D11DeviceContext * deviceContext);
+        void Draw(ID3D11DeviceContext* deviceContext);
 
         // 设置调试对象名
         // 若缓冲区被重新设置，调试对象名也需要被重新设置
         void SetDebugObjectName(const std::string& name);
     private:
         Transform m_Transform;								// 物体变换信息
+        Material m_Material;								// 物体材质
         ComPtr<ID3D11ShaderResourceView> m_pTexture;		// 纹理
         ComPtr<ID3D11Buffer> m_pVertexBuffer;				// 顶点缓冲区
         ComPtr<ID3D11Buffer> m_pIndexBuffer;				// 索引缓冲区
@@ -93,9 +97,10 @@ private:
     ComPtr<ID3D11InputLayout> m_pVertexLayout3D;				// 用于3D的顶点输入布局
     ComPtr<ID3D11Buffer> m_pConstantBuffers[4];				    // 常量缓冲区
 
-    GameObject m_WoodCrate;									    // 木盒
+    GameObject m_WireFence;									    // 篱笆盒
     GameObject m_Floor;										    // 地板
     std::vector<GameObject> m_Walls;							// 墙壁
+    GameObject m_Water;										    // 水
 
     ComPtr<ID3D11VertexShader> m_pVertexShader3D;				// 用于3D的顶点着色器
     ComPtr<ID3D11PixelShader> m_pPixelShader3D;				    // 用于3D的像素着色器
@@ -105,8 +110,6 @@ private:
     CBChangesEveryFrame m_CBFrame;							    // 该缓冲区存放仅在每一帧进行更新的变量
     CBChangesOnResize m_CBOnResize;							    // 该缓冲区存放仅在窗口大小变化时更新的变量
     CBChangesRarely m_CBRarely;								    // 该缓冲区存放不会再进行修改的变量
-
-    ComPtr<ID3D11SamplerState> m_pSamplerState;				    // 采样器状态
 
     std::shared_ptr<Camera> m_pCamera;						    // 摄像机
     CameraMode m_CameraMode;									// 摄像机模式
