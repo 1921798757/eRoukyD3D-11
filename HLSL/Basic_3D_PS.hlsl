@@ -4,7 +4,7 @@
 float4 PS(VertexPosHWNormalTex pIn) : SV_Target
 {
     // 提前进行Alpha裁剪，对不符合要求的像素可以避免后续运算
-    float4 texColor = g_Tex.Sample(g_SamLinear, pIn.tex);
+    float4 texColor = g_Tex.Sample(g_Sam, pIn.tex);
     clip(texColor.a - 0.1f);
 
     // 标准化法向量
@@ -60,7 +60,7 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
         
     
     
-    SpotLight spotLight;
+    SpotLight spotLight; 
     // 若当前在绘制反射物体，需要对光照进行反射矩阵变换
     [unroll]
     for (i = 0; i < 5; ++i)
