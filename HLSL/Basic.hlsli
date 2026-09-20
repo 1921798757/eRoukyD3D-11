@@ -8,6 +8,7 @@ cbuffer CBChangesEveryDrawing : register(b0)
 {
     matrix g_World;
     matrix g_WorldInvTranspose;
+    Material g_Material;
 }
 
 cbuffer CBChangesEveryFrame : register(b1)
@@ -26,12 +27,11 @@ cbuffer CBChangesRarely : register(b3)
     DirectionalLight g_DirLight[10];
     PointLight g_PointLight[10];
     SpotLight g_SpotLight[10];
-    Material g_Material;
     int g_NumDirLight;
     int g_NumPointLight;
     int g_NumSpotLight;
+    float g_Pad;
 }
-
 
 
 struct VertexPosNormalTex
@@ -60,8 +60,6 @@ struct VertexPosHTex
     float4 posH : SV_POSITION;
     float2 tex : TEXCOORD;
 };
-
-
 
 
 
