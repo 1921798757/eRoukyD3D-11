@@ -15,6 +15,13 @@ VertexPosHWNormalTex VS(VertexPosNormalTex vIn)
         posW = mul(posW, g_Reflection);
         normalW = mul(normalW, (float3x3) g_Reflection);
     }
+    // 若当前在绘制阴影，先进行投影操作
+    [flatten]
+    if (g_IsShadow)
+    {
+        posW = (g_IsReflection ? mul(posW, g_RefShadow) : mul(posW, g_Shadow));
+    }
+
     vOut.posH = mul(posW, viewProj);
     vOut.posW = posW.xyz;
     vOut.normalW = normalW;
