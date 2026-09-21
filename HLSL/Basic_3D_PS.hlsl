@@ -50,7 +50,7 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
         [flatten]
         if (g_IsReflection)
         {
-            pointLight.position = (float3) mul(float4(pointLight.position, 1.0f), g_Reflection);
+            pointLight.position = mul(float4(pointLight.position, 1.0f), g_Reflection).xyz;
         }
         ComputePointLight(g_Material, pointLight, pIn.posW, pIn.normalW, toEyeW, A, D, S);
         ambient += A;
@@ -60,7 +60,7 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
         
     
     
-    SpotLight spotLight; 
+    SpotLight spotLight;
     // 若当前在绘制反射物体，需要对光照进行反射矩阵变换
     [unroll]
     for (i = 0; i < 5; ++i)

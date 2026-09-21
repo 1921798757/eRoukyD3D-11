@@ -60,6 +60,10 @@ public:
     void SetRenderDefault(ID3D11DeviceContext * deviceContext);
     // Alpha混合绘制
     void SetRenderAlphaBlend(ID3D11DeviceContext * deviceContext);
+    // 绘制闪电动画所需要的特效，关闭深度测试
+    void SetDrawBoltAnimNoDepthTest(ID3D11DeviceContext * deviceContext);
+    // 绘制闪电动画所需要的特效，关闭深度写入
+    void SetDrawBoltAnimNoDepthWrite(ID3D11DeviceContext * deviceContext);
     // 无二次混合
     void SetRenderNoDoubleBlend(ID3D11DeviceContext * deviceContext, UINT stencilRef);
     // 仅写入模板值
@@ -68,12 +72,17 @@ public:
     void SetRenderDefaultWithStencil(ID3D11DeviceContext * deviceContext, UINT stencilRef);
     // 对指定模板值的区域进行绘制，采用Alpha混合
     void SetRenderAlphaBlendWithStencil(ID3D11DeviceContext * deviceContext, UINT stencilRef);
+    // 绘制闪电动画所需要的特效，关闭深度测试，对指定模板值区域进行绘制
+    void SetDrawBoltAnimNoDepthTestWithStencil(ID3D11DeviceContext * deviceContext, UINT stencilRef);
+    // 绘制闪电动画所需要的特效，关闭深度写入，对指定模板值区域进行绘制
+    void SetDrawBoltAnimNoDepthWriteWithStencil(ID3D11DeviceContext * deviceContext, UINT stencilRef);
     // 2D默认状态绘制
     void Set2DRenderDefault(ID3D11DeviceContext * deviceContext);
     // 2D混合绘制
     void Set2DRenderAlphaBlend(ID3D11DeviceContext * deviceContext);
 
     
+
 
     //
     // 矩阵设置
