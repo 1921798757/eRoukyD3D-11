@@ -1,7 +1,6 @@
-#include "Triangle.hlsli"
+#include "Basic.hlsli"
 
-// 像素着色器
-float4 PS(VertexOut pIn) : SV_Target
+float4 PS(VertexPosHColor pIn) : SV_Target
 {
-    return pIn.color;   
+    return pIn.color;
 }

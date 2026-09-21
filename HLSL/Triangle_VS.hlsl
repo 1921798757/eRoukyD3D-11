@@ -1,10 +1,10 @@
-#include "Triangle.hlsli"
+#include "Basic.hlsli"
 
-// 顶点着色器
-VertexOut VS(VertexIn vIn)
+VertexPosHColor VS(VertexPosColor vIn)
 {
-    VertexOut vOut;
-    vOut.posH = float4(vIn.pos, 1.0f);
-    vOut.color = vIn.color; // 这里alpha通道的值默认为1.0
+    matrix worldViewProj = mul(mul(g_World, g_View), g_Proj);
+    VertexPosHColor vOut;
+    vOut.color = vIn.color;
+    vOut.posH = mul(float4(vIn.posL, 1.0f), worldViewProj);
     return vOut;
 }

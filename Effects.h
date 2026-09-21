@@ -56,33 +56,13 @@ public:
     // 渲染模式的变更
     //
 
-    // 默认状态来绘制
-    void SetRenderDefault(ID3D11DeviceContext * deviceContext);
-    // Alpha混合绘制
-    void SetRenderAlphaBlend(ID3D11DeviceContext * deviceContext);
-    // 绘制闪电动画所需要的特效，关闭深度测试
-    void SetDrawBoltAnimNoDepthTest(ID3D11DeviceContext * deviceContext);
-    // 绘制闪电动画所需要的特效，关闭深度写入
-    void SetDrawBoltAnimNoDepthWrite(ID3D11DeviceContext * deviceContext);
-    // 无二次混合
-    void SetRenderNoDoubleBlend(ID3D11DeviceContext * deviceContext, UINT stencilRef);
-    // 仅写入模板值
-    void SetWriteStencilOnly(ID3D11DeviceContext * deviceContext, UINT stencilRef);
-    // 对指定模板值的区域进行绘制，采用默认状态
-    void SetRenderDefaultWithStencil(ID3D11DeviceContext * deviceContext, UINT stencilRef);
-    // 对指定模板值的区域进行绘制，采用Alpha混合
-    void SetRenderAlphaBlendWithStencil(ID3D11DeviceContext * deviceContext, UINT stencilRef);
-    // 绘制闪电动画所需要的特效，关闭深度测试，对指定模板值区域进行绘制
-    void SetDrawBoltAnimNoDepthTestWithStencil(ID3D11DeviceContext * deviceContext, UINT stencilRef);
-    // 绘制闪电动画所需要的特效，关闭深度写入，对指定模板值区域进行绘制
-    void SetDrawBoltAnimNoDepthWriteWithStencil(ID3D11DeviceContext * deviceContext, UINT stencilRef);
-    // 2D默认状态绘制
-    void Set2DRenderDefault(ID3D11DeviceContext * deviceContext);
-    // 2D混合绘制
-    void Set2DRenderAlphaBlend(ID3D11DeviceContext * deviceContext);
-
+    // 绘制三角形分裂
+    void SetRenderSplitedTriangle(ID3D11DeviceContext * deviceContext);
+    // 绘制无上下盖的圆柱体
+    void SetRenderCylinderNoCap(ID3D11DeviceContext * deviceContext);
+    // 绘制所有顶点的法向量
+    void SetRenderNormal(ID3D11DeviceContext * deviceContext);
     
-
 
     //
     // 矩阵设置
@@ -92,9 +72,6 @@ public:
     void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V);
     void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P);
 
-    void XM_CALLCONV SetReflectionMatrix(DirectX::FXMMATRIX R);
-    void XM_CALLCONV SetShadowMatrix(DirectX::FXMMATRIX S);
-    void XM_CALLCONV SetRefShadowMatrix(DirectX::FXMMATRIX RefS);
     
     //
     // 光照、材质和纹理相关设置
@@ -109,19 +86,12 @@ public:
 
     void SetMaterial(const Material& material);
 
-    void SetTexture(ID3D11ShaderResourceView * texture);
+    void SetTexture(ID3D11ShaderResourceView* texture);
 
     void SetEyePos(const DirectX::XMFLOAT3& eyePos);
 
-
-
-    //
-    // 状态开关设置
-    //
-
-    void SetReflectionState(bool isOn);
-    void SetShadowState(bool isOn);
-    
+    // 设置圆柱体侧面高度
+    void SetCylinderHeight(float height);
 
     // 应用常量缓冲区和纹理资源的变更
     void Apply(ID3D11DeviceContext * deviceContext) override;
