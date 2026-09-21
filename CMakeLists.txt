@@ -4,9 +4,9 @@ cmake_minimum_required (VERSION 3.14)
 # 用户配置
 # ------------------------------------------------------------------------------
 # 设置解决方案名
-project("13_EffectsShadows")
+project("14_DepthTest")
 # 设置项目名(不能有空格) 
-set(TARGET_NAME "13_EffectsShadows")
+set(TARGET_NAME "14_DepthTest")
 # 设置HLSL文件的存放位置
 set(HLSL_DIR "HLSL")
 # Win7系统设置为ON
@@ -58,7 +58,7 @@ source_group("HLSL Files" FILES ${HLSL_FILES})
 source_group("Common" FILES ${COMMON_FILES})
 
 # 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
-set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "13 EffectsShadows")
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "14_DepthTest")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
 
