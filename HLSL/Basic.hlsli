@@ -18,6 +18,8 @@ cbuffer CBChangesRarely : register(b2)
     SpotLight g_SpotLight[5];
     Material g_Material;
     matrix g_View;
+    float3 g_SphereCenter;
+    float g_SphereRadius;
     float3 g_EyePosW;
     float g_CylinderHeight;
 }
@@ -32,6 +34,13 @@ struct VertexPosColor
 struct VertexPosHColor
 {
     float4 posH : SV_POSITION;
+    float4 color : COLOR;
+};
+
+struct VertexPosHLColor
+{
+    float4 posH : SV_POSITION;
+    float3 posL : POSITION;
     float4 color : COLOR;
 };
 
