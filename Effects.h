@@ -10,8 +10,8 @@
 #define EFFECTS_H
 
 #include <memory>
-#include <LightHelper.h>
-#include <RenderStates.h>
+#include "LightHelper.h"
+#include "RenderStates.h"
 
 class IEffect
 {
@@ -56,13 +56,22 @@ public:
     // 渲染模式的变更
     //
 
-    // 绘制三角形分裂
+    // 绘制三角形分形
     void SetRenderSplitedTriangle(ID3D11DeviceContext * deviceContext);
-    // 绘制无上下盖的圆柱体
-    void SetRenderCylinderNoCap(ID3D11DeviceContext * deviceContext);
+    // 绘制雪花
+    void SetRenderSplitedSnow(ID3D11DeviceContext * deviceContext);
+    // 绘制球体
+    void SetRenderSplitedSphere(ID3D11DeviceContext * deviceContext);
+    // 通过流输出阶段获取三角形分裂的下一阶分形
+    void SetStreamOutputSplitedTriangle(ID3D11DeviceContext * deviceContext, ID3D11Buffer * vertexBufferIn, ID3D11Buffer * vertexBufferOut);
+    // 通过流输出阶段获取雪花的下一阶分形
+    void SetStreamOutputSplitedSnow(ID3D11DeviceContext * deviceContext, ID3D11Buffer * vertexBufferIn, ID3D11Buffer * vertexBufferOut);
+    // 通过流输出阶段获取球的下一阶分形
+    void SetStreamOutputSplitedSphere(ID3D11DeviceContext * deviceContext, ID3D11Buffer * vertexBufferIn, ID3D11Buffer * vertexBufferOut);
+
     // 绘制所有顶点的法向量
     void SetRenderNormal(ID3D11DeviceContext * deviceContext);
-    
+
 
     //
     // 矩阵设置
@@ -90,8 +99,12 @@ public:
 
     void SetEyePos(const DirectX::XMFLOAT3& eyePos);
 
-    // 设置圆柱体侧面高度
-    void SetCylinderHeight(float height);
+    //
+    // 设置球体
+    //
+
+    void SetSphereCenter(const DirectX::XMFLOAT3& center);
+    void SetSphereRadius(float radius);
 
     // 应用常量缓冲区和纹理资源的变更
     void Apply(ID3D11DeviceContext * deviceContext) override;
