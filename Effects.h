@@ -56,22 +56,11 @@ public:
     // 渲染模式的变更
     //
 
-    // 绘制三角形分形
-    void SetRenderSplitedTriangle(ID3D11DeviceContext * deviceContext);
-    // 绘制雪花
-    void SetRenderSplitedSnow(ID3D11DeviceContext * deviceContext);
-    // 绘制球体
-    void SetRenderSplitedSphere(ID3D11DeviceContext * deviceContext);
-    // 通过流输出阶段获取三角形分裂的下一阶分形
-    void SetStreamOutputSplitedTriangle(ID3D11DeviceContext * deviceContext, ID3D11Buffer * vertexBufferIn, ID3D11Buffer * vertexBufferOut);
-    // 通过流输出阶段获取雪花的下一阶分形
-    void SetStreamOutputSplitedSnow(ID3D11DeviceContext * deviceContext, ID3D11Buffer * vertexBufferIn, ID3D11Buffer * vertexBufferOut);
-    // 通过流输出阶段获取球的下一阶分形
-    void SetStreamOutputSplitedSphere(ID3D11DeviceContext * deviceContext, ID3D11Buffer * vertexBufferIn, ID3D11Buffer * vertexBufferOut);
-
-    // 绘制所有顶点的法向量
-    void SetRenderNormal(ID3D11DeviceContext * deviceContext);
-
+    // 默认状态来绘制
+    void SetRenderDefault(ID3D11DeviceContext * deviceContext);
+    // 公告板绘制
+    void SetRenderBillboard(ID3D11DeviceContext * deviceContext, bool enableAlphaToCoverage);
+    
 
     //
     // 矩阵设置
@@ -81,7 +70,8 @@ public:
     void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V);
     void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P);
 
-    
+
+
     //
     // 光照、材质和纹理相关设置
     //
@@ -95,16 +85,23 @@ public:
 
     void SetMaterial(const Material& material);
 
-    void SetTexture(ID3D11ShaderResourceView* texture);
+    void SetTexture(ID3D11ShaderResourceView * texture);
+
+    void SetTextureArray(ID3D11ShaderResourceView * textures);
 
     void SetEyePos(const DirectX::XMFLOAT3& eyePos);
 
+
+
     //
-    // 设置球体
+    // 状态设置
     //
 
-    void SetSphereCenter(const DirectX::XMFLOAT3& center);
-    void SetSphereRadius(float radius);
+    void SetFogState(bool isOn);
+    void SetFogStart(float fogStart);
+    void SetFogColor(DirectX::XMVECTOR fogColor);
+    void SetFogRange(float fogRange);
+    
 
     // 应用常量缓冲区和纹理资源的变更
     void Apply(ID3D11DeviceContext * deviceContext) override;
