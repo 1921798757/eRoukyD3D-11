@@ -90,17 +90,17 @@ struct SpotLight
 };
 
 // 物体表面材质
-struct Material
+struct PhongMaterial
 {
-    Material() = default;
+    PhongMaterial() = default;
 
-    Material(const Material&) = default;
-    Material& operator=(const Material&) = default;
+    PhongMaterial(const PhongMaterial&) = default;
+    PhongMaterial& operator=(const PhongMaterial&) = default;
 
-    Material(Material&&) = default;
-    Material& operator=(Material&&) = default;
+    PhongMaterial(PhongMaterial&&) = default;
+    PhongMaterial& operator=(PhongMaterial&&) = default;
 
-    Material(const DirectX::XMFLOAT4& _ambient, const DirectX::XMFLOAT4& _diffuse, const DirectX::XMFLOAT4& _specular,
+    PhongMaterial(const DirectX::XMFLOAT4& _ambient, const DirectX::XMFLOAT4& _diffuse, const DirectX::XMFLOAT4& _specular,
         const DirectX::XMFLOAT4& _reflect) :
         ambient(_ambient), diffuse(_diffuse), specular(_specular), reflect(_reflect) {}
 

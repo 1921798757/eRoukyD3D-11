@@ -4,9 +4,9 @@ cmake_minimum_required (VERSION 3.14)
 # 用户配置
 # ------------------------------------------------------------------------------
 # 设置解决方案名
-project("17_BillboardGS")
+project("19_Meshes")
 # 设置项目名(不能有空格) 
-set(TARGET_NAME "17_BillboardGS")
+set(TARGET_NAME "19_Meshes")
 # 设置HLSL文件的存放位置
 set(HLSL_DIR "HLSL")
 # Win7系统设置为ON
@@ -20,7 +20,7 @@ set(SHADER_STATIC_COMPILE ON)
 set(USE_IMGUI ON)
 # 使用Assimp时设置为ON
 # 需要将解压的assimp文件夹内CMakeList.txt所在的全部文件复制到当前项目的Assimp文件夹内
-set(USE_ASSIMP OFF)
+set(USE_ASSIMP ON)
 
 # ------------------------------------------------------------------------------
 # 项目细节配置(需熟悉CMake)
@@ -31,6 +31,8 @@ if (${WIN7_SYSTEM})
     add_compile_definitions(_WIN32_WINNT=0x601)
 endif()
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+# 并行编译时避免多个CL.EXE同时写入PDB文件导致的C1041错误
+add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/FS>")
 
 # 引入当前目录下的 Common 头文件目录
 include_directories(Common)
@@ -39,6 +41,8 @@ include_directories(Common)
 file(COPY ${HLSL_DIR} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 # 新增：拷贝纹理目录到输出目录
 file(COPY Texture DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# 拷贝模型目录到输出目录
+file(COPY Model DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 # 收集当前目录下的源码、头文件以及 HLSL 目录下的着色器文件
 file(GLOB HLSL_FILES ${HLSL_DIR}/*.hlsl ${HLSL_DIR}/*.hlsli)
@@ -58,7 +62,7 @@ source_group("HLSL Files" FILES ${HLSL_FILES})
 source_group("Common" FILES ${COMMON_FILES})
 
 # 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
-set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "17_BillboardGS")
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "19 Meshes")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -112,12 +116,12 @@ endif()
 
 # Assimp 支持
 if (${USE_ASSIMP})
-    set(ASSIMP_BUILD_ZLIB ON)
-    set(ASSIMP_BUILD_ASSIMP_TOOLS OFF)
-    set(ASSIMP_BUILD_TESTS OFF)
-    set(ASSIMP_INSTALL OFF)
-    set(BUILD_SHARED_LIBS OFF)
-    set(ASSIMP_INJECT_DEBUG_POSTFIX OFF)
+    set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
+    set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
     add_subdirectory("assimp")
     target_link_libraries(${TARGET_NAME} assimp)
 endif()
