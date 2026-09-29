@@ -6,11 +6,12 @@
 // DirectX Error Tracing. 
 //***************************************************************************************
 
+#pragma once
+
 #ifndef DXTRACE_H
 #define DXTRACE_H
 
 #include "WinMin.h"
-#include <Windows.h>
 
 // ------------------------------
 // DXTraceW函数
@@ -41,9 +42,8 @@ HRESULT WINAPI DXTraceW(_In_z_ const WCHAR* strFile, _In_ DWORD dwLine, _In_ HRE
     }
     #endif
 #else
-// Release模式下不做任何处理
     #ifndef HR
-    #define HR(x) (x)   // 把HR(x) 替换成 (x)，不做任何处理
+    #define HR(x) (x)
     #endif 
 #endif
 

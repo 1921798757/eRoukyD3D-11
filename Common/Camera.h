@@ -6,6 +6,8 @@
 // Provide 1st person(free view) and 3rd person cameras.
 //***************************************************************************************
 
+#pragma once
+
 #ifndef CAMERA_H
 #define CAMERA_H
 
@@ -52,13 +54,18 @@ public:
     // 获取矩阵
     //
 
-    DirectX::XMMATRIX GetViewXM() const;
-    DirectX::XMMATRIX GetProjXM() const;
-    DirectX::XMMATRIX GetViewProjXM() const;
+    DirectX::XMMATRIX GetLocalToWorldMatrixXM() const;
+    DirectX::XMMATRIX GetViewMatrixXM() const;
+    DirectX::XMMATRIX GetProjMatrixXM(bool reversedZ = false) const;
+    DirectX::XMMATRIX GetViewProjMatrixXM(bool reversedZ = false) const;
 
     // 获取视口
     D3D11_VIEWPORT GetViewPort() const;
 
+    float GetNearZ() const;
+    float GetFarZ() const;
+    float GetFovY() const;
+    float GetAspectRatio() const;
 
     // 设置视锥体
     void SetFrustum(float fovY, float aspect, float nearZ, float farZ);
@@ -66,7 +73,7 @@ public:
     // 设置视口
     void SetViewPort(const D3D11_VIEWPORT& viewPort);
     void SetViewPort(float topLeftX, float topLeftY, float width, float height, float minDepth = 0.0f, float maxDepth = 1.0f);
-
+    
 protected:
 
     // 摄像机的变换
@@ -101,6 +108,8 @@ public:
     void Walk(float d);
     // 前进(朝前向移动)
     void MoveForward(float d);
+    // 移动
+    void Translate(const DirectX::XMFLOAT3& dir, float magnitude);
     // 上下观察
     // 正rad值向上观察
     // 负rad值向下观察

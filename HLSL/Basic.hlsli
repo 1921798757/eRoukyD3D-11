@@ -1,7 +1,6 @@
 #include "LightHelper.hlsli"
 
-Texture2D g_Tex : register(t0);
-Texture2DArray g_TexArray : register(t1);
+Texture2D g_DiffuseMap : register(t0);
 SamplerState g_Sam : register(s0);
 
 
@@ -14,54 +13,18 @@ cbuffer CBChangesEveryDrawing : register(b0)
 
 cbuffer CBChangesEveryFrame : register(b1)
 {
-    matrix g_View;
+    matrix g_ViewProj;
     float3 g_EyePosW;
-    float g_Pad;
 }
 
-cbuffer CBDrawingStates : register(b2)
-{
-    float4 g_FogColor;
-    int g_FogEnabled;
-    float g_FogStart;
-    float g_FogRange;
-    float g_Pad2;
-}
-
-cbuffer CBChangesOnResize : register(b3)
-{
-    matrix g_Proj;
-}
-
-cbuffer CBChangesRarely : register(b4)
+cbuffer CBChangesRarely : register(b2)
 {
     DirectionalLight g_DirLight[5];
     PointLight g_PointLight[5];
     SpotLight g_SpotLight[5];
-    float g_CylinderHeight;
-    float3 g_SphereCenter;
-    float g_SphereRadius;
 }
 
 
-struct VertexPosHColor
-{
-    float4 posH : SV_POSITION;
-    float4 color : COLOR;
-};
-
-struct VertexPosColor
-{
-    float3 posL : POSITION;
-    float4 color : COLOR;
-};
-
-struct VertexPosNormalColor
-{
-    float3 posL : POSITION;
-    float3 normalL : NORMAL;
-    float4 color : COLOR;
-};
 
 struct VertexPosNormalTex
 {
@@ -73,32 +36,9 @@ struct VertexPosNormalTex
 struct VertexPosHWNormalTex
 {
     float4 posH : SV_POSITION;
-    float3 posW : POSITION; // �������е�λ��
-    float3 normalW : NORMAL; // �������������еķ���
+    float3 posW : POSITION;     // 在世界中的位置
+    float3 normalW : NORMAL;    // 法向量在世界中的方向
     float2 tex : TEXCOORD;
-};
-
-struct VertexPosHWNormalColor
-{
-    float4 posH : SV_POSITION;
-    float3 posW : POSITION;
-    float3 normalW : NORMAL;
-    float4 color : COLOR;
-};
-
-struct PointSprite
-{
-    float3 posW : POSITION;
-    float2 SizeW : SIZE;
-};
-
-struct BillboardVertex
-{
-    float4 posH : SV_POSITION;
-    float3 posW : POSITION;
-    float3 normalW : NORMAL;
-    float2 tex : TEXCOORD;
-    uint PrimID : SV_PrimitiveID;
 };
 
 
