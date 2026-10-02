@@ -4,9 +4,9 @@ cmake_minimum_required (VERSION 3.14)
 # 用户配置
 # ------------------------------------------------------------------------------
 # 设置解决方案名
-project("19_Meshes")
+project("20_Instancing_and_Frustum_Culling")
 # 设置项目名(不能有空格) 
-set(TARGET_NAME "19_Meshes")
+set(TARGET_NAME "20_Instancing_and_Frustum_Culling")
 # 设置HLSL文件的存放位置
 set(HLSL_DIR "HLSL")
 # Win7系统设置为ON
@@ -25,7 +25,11 @@ set(USE_ASSIMP ON)
 # ------------------------------------------------------------------------------
 # 项目细节配置(需熟悉CMake)
 # ------------------------------------------------------------------------------
-set(CMAKE_CXX_STANDARD 17) 
+set(CMAKE_CXX_STANDARD 17)
+
+# 强制使用动态运行时库（/MD 或 /MDd），避免 LNK4098 警告和运行时崩溃
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+
 add_compile_definitions(UNICODE _UNICODE)
 if (${WIN7_SYSTEM})
     add_compile_definitions(_WIN32_WINNT=0x601)
@@ -62,7 +66,7 @@ source_group("HLSL Files" FILES ${HLSL_FILES})
 source_group("Common" FILES ${COMMON_FILES})
 
 # 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
-set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "19 Meshes")
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "20 Instancing and Frustum Culling")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
 
