@@ -12,7 +12,6 @@ using namespace DirectX;
 
 # pragma warning(disable: 26812)
 
-
 //
 // BasicEffect::Impl 需要先于BasicEffect的定义
 //
@@ -100,8 +99,7 @@ bool BasicEffect::InitAll(ID3D11Device* device)
         blob->GetBufferPointer(), blob->GetBufferSize(), pImpl->m_pVertexPosNormalTexLayout.GetAddressOf()));
 
     // 创建像素着色器
-    pImpl->m_pEffectHelper->CreateShaderFromFile("BasicPS", L"HLSL/Basic_PS.cso", device,
-        "PS", "ps_5_0");
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("BasicPS", L"HLSL/Basic_PS.cso", device));
 
 
     // 创建通道
@@ -109,7 +107,6 @@ bool BasicEffect::InitAll(ID3D11Device* device)
     passDesc.nameVS = "BasicVS";
     passDesc.namePS = "BasicPS";
     HR(pImpl->m_pEffectHelper->AddEffectPass("Basic", device, &passDesc));
-
 
     pImpl->m_pEffectHelper->SetSamplerStateByName("g_Sam", RenderStates::SSLinearWrap.Get());
 
@@ -194,9 +191,19 @@ void BasicEffect::SetEyePos(const DirectX::XMFLOAT3& eyePos)
     pImpl->m_pEffectHelper->GetConstantBufferVariable("g_EyePosW")->SetFloatVector(3, reinterpret_cast<const float*>(&eyePos));
 }
 
-void BasicEffect::SetReflectionEnabled(bool enabled)
+void BasicEffect::SetReflectionEnabled(bool isEnable)
 {
-    pImpl->m_pEffectHelper->GetConstantBufferVariable("g_ReflectionEnabled")->SetSInt(enabled);
+    pImpl->m_pEffectHelper->GetConstantBufferVariable("g_ReflectionEnabled")->SetSInt(isEnable);
+}
+
+void BasicEffect::SetRefractionEnabled(bool isEnable)
+{
+    pImpl->m_pEffectHelper->GetConstantBufferVariable("g_RefractionEnabled")->SetSInt(isEnable);
+}
+
+void BasicEffect::SetRefractionEta(float eta)
+{
+    pImpl->m_pEffectHelper->GetConstantBufferVariable("g_Eta")->SetFloat(eta);
 }
 
 void BasicEffect::SetRenderDefault()
@@ -231,4 +238,7 @@ void BasicEffect::Apply(ID3D11DeviceContext* deviceContext)
     if (pImpl->m_pCurrEffectPass)
         pImpl->m_pCurrEffectPass->Apply(deviceContext);
 }
+
+
+
 

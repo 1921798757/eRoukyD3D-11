@@ -59,7 +59,7 @@ public:
     void SetRenderDefault();
 
     void SetTextureCube(ID3D11ShaderResourceView* textureCube);
-    
+
     // 各种类型灯光允许的最大数目
     static const int maxLights = 5;
 
@@ -69,7 +69,9 @@ public:
 
     void SetEyePos(const DirectX::XMFLOAT3& eyePos);
 
-    void SetReflectionEnabled(bool enabled);
+    void SetReflectionEnabled(bool isEnable);
+    void SetRefractionEnabled(bool isEnable);
+    void SetRefractionEta(float eta);	// 空气/介质折射比
 
     // 应用常量缓冲区和纹理资源的变更
     void Apply(ID3D11DeviceContext* deviceContext) override;

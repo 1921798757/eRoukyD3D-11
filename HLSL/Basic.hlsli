@@ -19,7 +19,9 @@ cbuffer CBChangesEveryObjectDrawing : register(b1)
 cbuffer CBDrawingStates : register(b2)
 {
     int g_ReflectionEnabled;
-    float3 g_Pad;
+    int g_RefractionEnabled;
+    float g_Eta;  // 空气/介质折射比
+    float g_Pad;
 }
 
 cbuffer CBChangesEveryFrame : register(b3)
@@ -50,3 +52,5 @@ struct VertexPosHWNormalTex
     float3 normalW : NORMAL;    // 法向量在世界中的方向
     float2 tex : TEXCOORD;
 };
+
+
