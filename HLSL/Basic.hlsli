@@ -1,6 +1,7 @@
 #include "LightHelper.hlsli"
 
 Texture2D g_DiffuseMap : register(t0);
+TextureCube g_TexCube : register(t1);
 SamplerState g_Sam : register(s0);
 
 
@@ -15,14 +16,20 @@ cbuffer CBChangesEveryObjectDrawing : register(b1)
     Material g_Material;
 }
 
-cbuffer CBChangesEveryFrame : register(b2)
+cbuffer CBDrawingStates : register(b2)
+{
+    int g_ReflectionEnabled;
+    float3 g_Pad;
+}
+
+cbuffer CBChangesEveryFrame : register(b3)
 {
     matrix g_ViewProj;
     float3 g_EyePosW;
-    float g_Pad;
+    float g_Pad2;
 }
 
-cbuffer CBChangesRarely : register(b3)
+cbuffer CBChangesRarely : register(b4)
 {
     DirectionalLight g_DirLight[5];
     PointLight g_PointLight[5];

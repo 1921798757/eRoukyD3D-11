@@ -6,7 +6,7 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
     float4 texColor = g_DiffuseMap.Sample(g_Sam, pIn.tex);
     // 提前进行Alpha裁剪，对不符合要求的像素可以避免后续运算
     clip(texColor.a - 0.1f);
-
+    
     // 标准化法向量
     pIn.normalW = normalize(pIn.normalW);
 
@@ -49,8 +49,17 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
         spec += S;
     }
   
-    
     float4 litColor = texColor * (ambient + diffuse) + spec;
+
+    if (g_ReflectionEnabled)
+    {
+        float3 incident = -toEyeW;
+        float3 reflectionVector = reflect(incident, pIn.normalW);
+        float4 reflectionColor = g_TexCube.Sample(g_Sam, reflectionVector);
+
+        litColor += g_Material.reflect * reflectionColor;
+    }
+    
     litColor.a = texColor.a * g_Material.diffuse.a;
     return litColor;
 }
