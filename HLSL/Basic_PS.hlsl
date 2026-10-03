@@ -51,6 +51,7 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
   
     float4 litColor = texColor * (ambient + diffuse) + spec;
 
+    // 反射
     if (g_ReflectionEnabled)
     {
         float3 incident = -toEyeW;
@@ -58,6 +59,16 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
         float4 reflectionColor = g_TexCube.Sample(g_Sam, reflectionVector);
 
         litColor += g_Material.reflect * reflectionColor;
+    }
+    
+    // 折射
+    if (g_RefractionEnabled)
+    {
+        float3 incident = -toEyeW;
+        float3 refractionVector = refract(incident, pIn.normalW, g_Eta);
+        float4 refractionColor = g_TexCube.Sample(g_Sam, refractionVector);
+
+        litColor += g_Material.reflect * refractionColor;
     }
     
     litColor.a = texColor.a * g_Material.diffuse.a;
