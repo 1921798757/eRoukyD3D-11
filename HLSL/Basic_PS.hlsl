@@ -10,8 +10,9 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
     // 标准化法向量
     pIn.normalW = normalize(pIn.normalW);
 
-    // 顶点指向眼睛的向量
+    // 求出顶点指向眼睛的向量，以及顶点与眼睛的距离
     float3 toEyeW = normalize(g_EyePosW - pIn.posW);
+    float distToEye = distance(g_EyePosW, pIn.posW);
 
     // 初始化为0 
     float4 ambient = float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -50,27 +51,17 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
     }
   
     float4 litColor = texColor * (ambient + diffuse) + spec;
-
-    // 反射
-    if (g_ReflectionEnabled)
-    {
-        float3 incident = -toEyeW;
-        float3 reflectionVector = reflect(incident, pIn.normalW);
-        float4 reflectionColor = g_TexCube.Sample(g_Sam, reflectionVector);
-
-        litColor += g_Material.reflect * reflectionColor;
-    }
     
-    // 折射
-    if (g_RefractionEnabled)
+    // 雾效部分
+    [flatten]
+    if (g_FogEnabled)
     {
-        float3 incident = -toEyeW;
-        float3 refractionVector = refract(incident, pIn.normalW, g_Eta);
-        float4 refractionColor = g_TexCube.Sample(g_Sam, refractionVector);
-
-        litColor += g_Material.reflect * refractionColor;
+        // 限定在0.0f到1.0f范围
+        float fogLerp = saturate((distToEye - g_FogStart) / g_FogRange);
+        // 根据雾色和光照颜色进行线性插值
+        litColor = lerp(litColor, g_FogColor, fogLerp);
     }
-    
+
     litColor.a = texColor.a * g_Material.diffuse.a;
     return litColor;
 }

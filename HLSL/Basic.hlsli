@@ -1,7 +1,6 @@
 #include "LightHelper.hlsli"
 
 Texture2D g_DiffuseMap : register(t0);
-TextureCube g_TexCube : register(t1);
 SamplerState g_Sam : register(s0);
 
 
@@ -18,10 +17,11 @@ cbuffer CBChangesEveryObjectDrawing : register(b1)
 
 cbuffer CBDrawingStates : register(b2)
 {
-    int g_ReflectionEnabled;
-    int g_RefractionEnabled;
-    float g_Eta;  // 空气/介质折射比
-    float g_Pad;
+    float4 g_FogColor;
+    int g_FogEnabled;
+    float g_FogStart;
+    float g_FogRange;
+    int g_Pad;
 }
 
 cbuffer CBChangesEveryFrame : register(b3)
@@ -52,5 +52,21 @@ struct VertexPosHWNormalTex
     float3 normalW : NORMAL;    // 法向量在世界中的方向
     float2 tex : TEXCOORD;
 };
+
+struct VertexPosHTex
+{
+    float4 posH : SV_POSITION;
+    float2 tex : TEXCOORD;
+};
+
+struct InstancePosNormalTex
+{
+    float3 posL : POSITION;
+    float3 normalL : NORMAL;
+    float2 tex : TEXCOORD;
+    matrix world : World;
+    matrix worldInvTranspose : WorldInvTranspose;
+};
+
 
 
