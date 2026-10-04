@@ -4,9 +4,9 @@ cmake_minimum_required (VERSION 3.14)
 # 用户配置
 # ------------------------------------------------------------------------------
 # 设置解决方案名
-project("23_DynamicCubeMapping")
+project("24_RenderToTexture")
 # 设置项目名(不能有空格) 
-set(TARGET_NAME "23_DynamicCubeMapping")
+set(TARGET_NAME "24_RenderToTexture")
 # 设置HLSL文件的存放位置
 set(HLSL_DIR "HLSL")
 # Win7系统设置为ON
@@ -58,7 +58,7 @@ aux_source_directory(. DIR_SRCS)
 
 # 创建可执行文件并链接库 (直接将HLSL_FILES放入可执行文件，确保不管是否开启静态编译，在IDE中都始终可见)
 add_executable(${TARGET_NAME} WIN32 ${DIR_SRCS} ${HEADER_FILES} ${HLSL_FILES} ${COMMON_FILES})
-target_link_libraries(${TARGET_NAME} d3d11.lib dxgi.lib dxguid.lib D3DCompiler.lib winmm.lib d2d1.lib dwrite.lib)
+target_link_libraries(${TARGET_NAME} d3d11.lib dxgi.lib dxguid.lib D3DCompiler.lib winmm.lib d2d1.lib dwrite.lib windowscodecs.lib ole32.lib)
 
 # 在 IDE 中对 HLSL 文件进行分组显示
 source_group("HLSL Files" FILES ${HLSL_FILES})
@@ -66,7 +66,7 @@ source_group("HLSL Files" FILES ${HLSL_FILES})
 source_group("Common" FILES ${COMMON_FILES})
 
 # 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
-set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "23_DynamicCubeMapping")
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "24_RenderToTexture")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -125,7 +125,7 @@ if (${USE_ASSIMP})
     set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-    set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE) 
     add_subdirectory("assimp")
     target_link_libraries(${TARGET_NAME} assimp)
 endif()
