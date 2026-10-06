@@ -1,6 +1,8 @@
 #include "LightHelper.hlsli"
 
 Texture2D g_DiffuseMap : register(t0);
+Texture2D g_NormalMap : register(t1);
+TextureCube g_TexCube : register(t2);
 SamplerState g_Sam : register(s0);
 
 
@@ -17,10 +19,9 @@ cbuffer CBChangesEveryObjectDrawing : register(b1)
 
 cbuffer CBDrawingStates : register(b2)
 {
-    float4 g_FogColor;
-    int g_FogEnabled;
-    float g_FogStart;
-    float g_FogRange;
+    int g_ReflectionEnabled;
+    int g_RefractionEnabled;
+    float g_Eta; // 空气/介质折射比
     int g_Pad;
 }
 
@@ -45,17 +46,11 @@ struct VertexPosNormalTex
     float2 tex : TEXCOORD;
 };
 
-struct VertexPosHWNormalTex
+struct VertexPosNormalTangentTex
 {
-    float4 posH : SV_POSITION;
-    float3 posW : POSITION;     // 在世界中的位置
-    float3 normalW : NORMAL;    // 法向量在世界中的方向
-    float2 tex : TEXCOORD;
-};
-
-struct VertexPosHTex
-{
-    float4 posH : SV_POSITION;
+    float3 posL : POSITION;
+    float3 normalL : NORMAL;
+    float4 tangentL : TANGENT;
     float2 tex : TEXCOORD;
 };
 
@@ -68,5 +63,30 @@ struct InstancePosNormalTex
     matrix worldInvTranspose : WorldInvTranspose;
 };
 
+struct InstancePosNormalTangentTex
+{
+    float3 posL : POSITION;
+    float3 normalL : NORMAL;
+    float4 tangentL : TANGENT;
+    float2 tex : TEXCOORD;
+    matrix world : World;
+    matrix worldInvTranspose : WorldInvTranspose;
+};
 
+struct VertexPosHWNormalTex
+{
+    float4 posH : SV_POSITION;
+    float3 posW : POSITION; // 在世界中的位置
+    float3 normalW : NORMAL; // 法向量在世界中的方向
+    float2 tex : TEXCOORD;
+};
+
+struct VertexPosHWNormalTangentTex
+{
+    float4 posH : SV_POSITION;
+    float3 posW : POSITION; // 在世界中的位置
+    float3 normalW : NORMAL; // 法向量在世界中的方向
+    float4 tangentW : TANGENT; // 切线在世界中的方向
+    float2 tex : TEXCOORD;
+};
 

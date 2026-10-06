@@ -1,18 +1,23 @@
 #include "Basic.hlsli"
 
 // 像素着色器(3D)
-float4 PS(VertexPosHWNormalTex pIn) : SV_Target
+float4 PS(VertexPosHWNormalTangentTex pIn) : SV_Target
 {
     float4 texColor = g_DiffuseMap.Sample(g_Sam, pIn.tex);
     // 提前进行Alpha裁剪，对不符合要求的像素可以避免后续运算
     clip(texColor.a - 0.1f);
     
-    // 标准化法向量
+    // 标准化法向量和切线
     pIn.normalW = normalize(pIn.normalW);
-
+    pIn.tangentW.xyz = normalize(pIn.tangentW.xyz);
+    
     // 求出顶点指向眼睛的向量，以及顶点与眼睛的距离
     float3 toEyeW = normalize(g_EyePosW - pIn.posW);
     float distToEye = distance(g_EyePosW, pIn.posW);
+
+    // 法线映射
+    float3 normalMapSample = g_NormalMap.Sample(g_Sam, pIn.tex).rgb;
+    float3 bumpedNormalW = NormalSampleToWorldSpace(normalMapSample, pIn.normalW, pIn.tangentW);
 
     // 初始化为0 
     float4 ambient = float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -26,7 +31,7 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
     [unroll]
     for (i = 0; i < 5; ++i)
     {
-        ComputeDirectionalLight(g_Material, g_DirLight[i], pIn.normalW, toEyeW, A, D, S);
+        ComputeDirectionalLight(g_Material, g_DirLight[i], bumpedNormalW, toEyeW, A, D, S);
         ambient += A;
         diffuse += D;
         spec += S;
@@ -35,7 +40,7 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
     [unroll]
     for (i = 0; i < 5; ++i)
     {
-        ComputePointLight(g_Material, g_PointLight[i], pIn.posW, pIn.normalW, toEyeW, A, D, S);
+        ComputePointLight(g_Material, g_PointLight[i], pIn.posW, bumpedNormalW, toEyeW, A, D, S);
         ambient += A;
         diffuse += D;
         spec += S;
@@ -44,13 +49,14 @@ float4 PS(VertexPosHWNormalTex pIn) : SV_Target
     [unroll]
     for (i = 0; i < 5; ++i)
     {
-        ComputeSpotLight(g_Material, g_SpotLight[i], pIn.posW, pIn.normalW, toEyeW, A, D, S);
+        ComputeSpotLight(g_Material, g_SpotLight[i], pIn.posW, bumpedNormalW, toEyeW, A, D, S);
         ambient += A;
         diffuse += D;
         spec += S;
     }
   
     float4 litColor = texColor * (ambient + diffuse) + spec;
+
     // 反射
     if (g_ReflectionEnabled)
     {
