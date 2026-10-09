@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project("26_Compute_Shader_Beginning")
+project("27_Bitonic_Sort")
 
 set(CMAKE_CXX_STANDARD 17)
 add_compile_definitions(UNICODE _UNICODE)
@@ -51,12 +51,12 @@ foreach(HLSL_FILE ${HLSL_FILES})
                                 VS_SHADER_ENABLE_DEBUG $<$<CONFIG:Debug>:true>)
 endforeach()
 
-add_executable(26_Compute_Shader_Beginning WIN32 ${DIR_SRCS} ${HEADER_FILES} ${HLSL_FILES} ${COMMON_FILES})
-target_link_libraries(26_Compute_Shader_Beginning d3d11.lib dxgi.lib dxguid.lib D3DCompiler.lib winmm.lib)
+add_executable(27_Bitonic_Sort WIN32 ${DIR_SRCS} ${HEADER_FILES} ${HLSL_FILES} ${COMMON_FILES})
+target_link_libraries(27_Bitonic_Sort d3d11.lib dxgi.lib dxguid.lib D3DCompiler.lib winmm.lib)
 
 source_group("Shaders" FILES ${HLSL_FILES})
 source_group("Common" FILES ${COMMON_FILES})
-set_target_properties(26_Compute_Shader_Beginning PROPERTIES OUTPUT_NAME "26 Compute Shader Beginning")
+set_target_properties(27_Bitonic_Sort PROPERTIES OUTPUT_NAME "27 Bitonic Sort")
 
-set_target_properties(26_Compute_Shader_Beginning PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
-set_target_properties(26_Compute_Shader_Beginning PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
+set_target_properties(27_Bitonic_Sort PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
+set_target_properties(27_Bitonic_Sort PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})

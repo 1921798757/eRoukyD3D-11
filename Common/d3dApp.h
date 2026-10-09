@@ -5,6 +5,8 @@
 #include <string>
 #include <d3d11_1.h>
 #include <DirectXMath.h>
+#include "CpuTimer.h"
+#include "GpuTimer.h"
 
 class D3DApp
 {
