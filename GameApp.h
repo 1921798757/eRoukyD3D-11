@@ -1,54 +1,60 @@
 #ifndef GAMEAPP_H
 #define GAMEAPP_H
 
-#include "d3dApp.h"
-#include <d3dcompiler.h>
 #include <random>
-#include <algorithm>
-
-#define BITONIC_BLOCK_SIZE 512
-
-#define TRANSPOSE_BLOCK_SIZE 16
+#include <WinMin.h>
+#include "d3dApp.h"
+#include "Effects.h"
+#include "Waves.h"
+#include <CameraController.h>
+#include <RenderStates.h>
+#include <GameObject.h>
+#include <Texture2D.h>
+#include <Buffer.h>
+#include <Collision.h>
+#include <ModelManager.h>
+#include <TextureManager.h>
 
 class GameApp : public D3DApp
 {
 public:
-    struct CB
-    {
-        UINT level;
-        UINT descendMask;
-        UINT matrixWidth;
-        UINT matrixHeight;
-    };
 
-public:
-    GameApp(HINSTANCE hInstance);
+    GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWidth, int initHeight);
     ~GameApp();
 
     bool Init();
-    void Compute();
+    void OnResize();
+    void UpdateScene(float dt);
+    void DrawScene();
 
 private:
     bool InitResource();
-    void SetConstants(UINT level, UINT descendMask, UINT matrixWidth, UINT matrixHeight);
-    void GPUSort();
+
 private:
-    ComPtr<ID3D11Buffer> m_pConstantBuffer;				// 常量缓冲区
-    ComPtr<ID3D11Buffer> m_pTypedBuffer1;				// 有类型缓冲区1
-    ComPtr<ID3D11Buffer> m_pTypedBuffer2;				// 有类型缓冲区2
-    ComPtr<ID3D11Buffer> m_pTypedBufferCopy;			// 用于拷贝的有类型缓冲区
-    ComPtr<ID3D11UnorderedAccessView> m_pDataUAV1;		// 有类型缓冲区1对应的无序访问视图
-    ComPtr<ID3D11UnorderedAccessView> m_pDataUAV2;		// 有类型缓冲区2对应的无序访问视图
-    ComPtr<ID3D11ShaderResourceView> m_pDataSRV1;		// 有类型缓冲区1对应的着色器资源视图
-    ComPtr<ID3D11ShaderResourceView> m_pDataSRV2;		// 有类型缓冲区2对应的着色器资源视图
+    
+    TextureManager m_TextureManager;
+    ModelManager m_ModelManager;
 
-    std::vector<UINT> m_RandomNums;
-    UINT m_RandomNumsCount = 0;
-    ComPtr<ID3D11ComputeShader> m_pBitonicSort_CS;
-    ComPtr<ID3D11ComputeShader> m_pMatrixTranspose_CS;
+    std::mt19937 m_RandEngine;									// 随机数生成器
+    std::uniform_int_distribution<uint32_t> m_RowRange;			// 行索引范围
+    std::uniform_int_distribution<uint32_t> m_ColRange;			// 列索引范围
+    std::uniform_real_distribution<float> m_MagnitudeRange;		// 振幅范围
 
-    CpuTimer m_Timer;
-    GpuTimer m_GpuTimer;
+    BasicEffect m_BasicEffect;									// 对象渲染特效管理
+
+    GameObject m_Land;											// 地面对象
+    GameObject m_WireFence;										// 篱笆盒
+    CpuWaves m_CpuWaves;                                        // CPU水波
+    GpuWaves m_GpuWaves;                                        // GPU水波
+
+    std::unique_ptr<Depth2D> m_pDepthTexture;                   // 深度纹理
+    std::unique_ptr<Texture2D> m_pLitTexture;                   // 场景绘制的缓冲区
+
+    float m_BaseTime = 0.0f;									// 控制水波生成的基准时间
+    int m_WavesMode = 1;                                        // 波浪绘制模式，0-GPU，1-CPU
+    bool m_EnabledFog = true;									// 开启雾效
+
+    std::shared_ptr<ThirdPersonCamera> m_pCamera;				// 摄像机
 };
 
 

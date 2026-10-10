@@ -1,9 +1,10 @@
 #include "GameApp.h"
-
+#include <XUtil.h>
+#include <DXTrace.h>
 using namespace DirectX;
 
-GameApp::GameApp(HINSTANCE hInstance)
-    : D3DApp(hInstance)
+GameApp::GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWidth, int initHeight)
+    : D3DApp(hInstance, windowName, initWidth, initHeight)
 {
 }
 
@@ -16,187 +17,250 @@ bool GameApp::Init()
     if (!D3DApp::Init())
         return false;
 
+    m_TextureManager.Init(m_pd3dDevice.Get());
+    m_ModelManager.Init(m_pd3dDevice.Get());
+
+    // 务必先初始化所有渲染状态，以供下面的特效使用
+    RenderStates::InitAll(m_pd3dDevice.Get());
+
+    if (!m_BasicEffect.InitAll(m_pd3dDevice.Get()))
+        return false;
+
     if (!InitResource())
         return false;
 
     return true;
 }
 
-void GameApp::Compute()
+void GameApp::OnResize()
 {
-    assert(m_pd3dImmediateContext);
+    D3DApp::OnResize();
 
-    // GPU排序
-    m_Timer.Reset();
-    m_Timer.Start();
-    m_GpuTimer.Init(m_pd3dDevice.Get(), m_pd3dImmediateContext.Get());
-    m_GpuTimer.Start();
-    GPUSort();
-    m_GpuTimer.Stop();
-    double gpuComputeTime = m_GpuTimer.GetTime();
+    m_pDepthTexture = std::make_unique<Depth2D>(m_pd3dDevice.Get(), m_ClientWidth, m_ClientHeight);
+    m_pLitTexture = std::make_unique<Texture2D>(m_pd3dDevice.Get(), m_ClientWidth, m_ClientHeight, DXGI_FORMAT_R8G8B8A8_UNORM);
+    m_pDepthTexture->SetDebugObjectName("DepthTexture");
+    m_pLitTexture->SetDebugObjectName("LitTexture");
 
-    // 结果回读到CPU进行比较
-    m_pd3dImmediateContext->CopyResource(m_pTypedBufferCopy.Get(), m_pTypedBuffer1.Get());
-    D3D11_MAPPED_SUBRESOURCE mappedData;
-    m_pd3dImmediateContext->Map(m_pTypedBufferCopy.Get(), 0, D3D11_MAP_READ, 0, &mappedData);
-    m_Timer.Tick();
-    m_Timer.Stop();
-    float gpuTotalTime = m_Timer.TotalTime();
+    // 摄像机变更显示
+    if (m_pCamera != nullptr)
+    {
+        m_pCamera->SetFrustum(XM_PI / 3, AspectRatio(), 1.0f, 1000.0f);
+        m_pCamera->SetViewPort(0.0f, 0.0f, (float)m_ClientWidth, (float)m_ClientHeight);
+        m_BasicEffect.SetProjMatrix(m_pCamera->GetProjMatrixXM());
+    }
+}
 
-    // CPU排序
-    m_Timer.Reset();
-    m_Timer.Start();
-    std::sort(m_RandomNums.begin(), m_RandomNums.begin() + m_RandomNumsCount);
-    m_Timer.Tick();
-    m_Timer.Stop();
-    float cpuTotalTime = m_Timer.TotalTime();
+void GameApp::UpdateScene(float dt)
+{
 
-    bool isSame = !memcmp(mappedData.pData, m_RandomNums.data(),
-        sizeof(uint32_t) * m_RandomNums.size());
+    // 获取子类
+    auto cam3rd = std::dynamic_pointer_cast<ThirdPersonCamera>(m_pCamera);
 
-    m_pd3dImmediateContext->Unmap(m_pTypedBufferCopy.Get(), 0);
+    // ******************
+    // 第三人称摄像机的操作
+    //
 
-    std::wstring wstr = L"排序元素数目：" + std::to_wstring(m_RandomNumsCount) +
-        L"/" + std::to_wstring(m_RandomNums.size());
-    wstr += L"\nGPU计算用时：" + std::to_wstring(gpuComputeTime) + L"秒";
-    wstr += L"\nGPU总用时：" + std::to_wstring(gpuTotalTime) + L"秒";
-    wstr += L"\nCPU用时：" + std::to_wstring(cpuTotalTime) + L"秒";
-    wstr += isSame ? L"\n排序结果一致" : L"\n排序结果不一致";
-    MessageBox(nullptr, wstr.c_str(), L"排序结束", MB_OK);
+    ImGuiIO& io = ImGui::GetIO();
+    // 绕物体旋转
+    if (ImGui::IsMouseDragging(ImGuiMouseButton_Right))
+    {
+        cam3rd->RotateX(io.MouseDelta.y * 0.01f);
+        cam3rd->RotateY(io.MouseDelta.x * 0.01f);
+    }
+    cam3rd->Approach(-io.MouseWheel * 1.0f);
+
+    m_BasicEffect.SetViewMatrix(m_pCamera->GetViewMatrixXM());
+    m_BasicEffect.SetEyePos(m_pCamera->GetPosition());
+
+    if (ImGui::Begin("Waves"))
+    {
+        static const char* wavemode_strs[] = {
+            "CPU",
+            "GPU"
+        };
+        if (ImGui::Combo("Waves Mode", &m_WavesMode, wavemode_strs, ARRAYSIZE(wavemode_strs)))
+        {
+            if (m_WavesMode)
+                m_GpuWaves.InitResource(m_pd3dDevice.Get(), 256, 256, 5.0f, 5.0f, 0.03f, 0.625f, 2.0f, 0.2f, 0.05f, 0.1f);
+            else
+                m_CpuWaves.InitResource(m_pd3dDevice.Get(), 256, 256, 5.0f, 5.0f, 0.03f, 0.625f, 2.0f, 0.2f, 0.05f, 0.1f);
+                
+        }
+        if (ImGui::Checkbox("Enable Fog", &m_EnabledFog))
+        {
+            m_BasicEffect.SetFogState(m_EnabledFog);
+        }
+    }
+    ImGui::End();
+    ImGui::Render();
+
+    // 每1/4s生成一个随机水波
+    if (m_Timer.TotalTime() - m_BaseTime >= 0.25f)
+    {
+        m_BaseTime += 0.25f;
+        if (m_WavesMode)
+        {
+            m_GpuWaves.Disturb(m_pd3dImmediateContext.Get(), 
+                m_RowRange(m_RandEngine), m_ColRange(m_RandEngine),
+                m_MagnitudeRange(m_RandEngine));
+        }
+        else
+        {
+            m_CpuWaves.Disturb(m_RowRange(m_RandEngine), m_ColRange(m_RandEngine),
+                m_MagnitudeRange(m_RandEngine));
+        }
+            
+    }
+
+    // 更新波浪
+    if (m_WavesMode)
+        m_GpuWaves.Update(m_pd3dImmediateContext.Get(), dt);
+    else
+        m_CpuWaves.Update(dt);
+}
+
+void GameApp::DrawScene()
+{
+    // 创建后备缓冲区的渲染目标视图
+    if (m_FrameCount < m_BackBufferCount)
+    {
+        ComPtr<ID3D11Texture2D> pBackBuffer;
+        m_pSwapChain->GetBuffer(0, IID_PPV_ARGS(pBackBuffer.GetAddressOf()));
+        CD3D11_RENDER_TARGET_VIEW_DESC rtvDesc(D3D11_RTV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB);
+        m_pd3dDevice->CreateRenderTargetView(pBackBuffer.Get(), &rtvDesc, m_pRenderTargetViews[m_FrameCount].ReleaseAndGetAddressOf());
+    }
+
+
+    float gray[4] = { 0.75f, 0.75f, 0.75f, 1.0f };
+    m_pd3dImmediateContext->ClearRenderTargetView(GetBackBufferRTV(), gray);
+    m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthTexture->GetDepthStencil(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+    ID3D11RenderTargetView* pRTVs[1] = { GetBackBufferRTV() };
+    m_pd3dImmediateContext->OMSetRenderTargets(1, pRTVs, m_pDepthTexture->GetDepthStencil());
+    D3D11_VIEWPORT viewport = m_pCamera->GetViewPort();
+    m_pd3dImmediateContext->RSSetViewports(1, &viewport);
+    
+    // ******************
+    // 1. 绘制不透明对象
+    //
+    m_BasicEffect.SetRenderDefault();
+    m_Land.Draw(m_pd3dImmediateContext.Get(), m_BasicEffect);
+    // ******************
+    // 2. 绘制半透明/透明对象
+    //
+    m_BasicEffect.SetRenderTransparent();
+    m_WireFence.Draw(m_pd3dImmediateContext.Get(), m_BasicEffect);
+
+    if (m_WavesMode)
+        m_GpuWaves.Draw(m_pd3dImmediateContext.Get(), m_BasicEffect);
+    else
+        m_CpuWaves.Draw(m_pd3dImmediateContext.Get(), m_BasicEffect);
+    
+    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+    HR(m_pSwapChain->Present(0, m_IsDxgiFlipModel ? DXGI_PRESENT_ALLOW_TEARING : 0));
 }
 
 
 
 bool GameApp::InitResource()
 {
-    // 初始化随机数数据
-    std::mt19937 randEngine;
-    randEngine.seed(std::random_device()());
-    std::uniform_int_distribution<uint32_t> powRange(9, 18);
-    // 元素数目必须为2的次幂且不小于512个，并用最大值填充
-    uint32_t elemCount = 1 << 18;
-    m_RandomNums.assign(elemCount, UINT_MAX);
-    // 填充随机数目的随机数，数目在一半容量到最大容量之间
-    std::uniform_int_distribution<uint32_t> numsCountRange((uint32_t)m_RandomNums.size() / 2,
-        (uint32_t)m_RandomNums.size());
-    m_RandomNumsCount = elemCount;
-    std::generate(m_RandomNums.begin(), m_RandomNums.begin() + m_RandomNumsCount, [&] {return randEngine(); });
+    // ******************
+    // 初始化游戏对象
+    //
+ 
+    // 地面
+    {
+        Model* pModel = m_ModelManager.CreateFromGeometry("Ground", Geometry::CreateGrid(XMFLOAT2(160.0f, 160.0f),
+            XMUINT2(50, 50), XMFLOAT2(10.0f, 10.0f),
+            [](float x, float z) { return 0.3f * (z * sinf(0.1f * x) + x * cosf(0.1f * z)); },	// 高度函数
+            [](float x, float z) { return XMFLOAT3{ -0.03f * z * cosf(0.1f * x) - 0.3f * cosf(0.1f * z), 1.0f,
+            -0.3f * sinf(0.1f * x) + 0.03f * x * sinf(0.1f * z) }; }));
+        pModel->SetDebugObjectName("Ground");
+        m_TextureManager.CreateFromFile("..\\Texture\\grass.dds");
+        pModel->materials[0].Set<std::string>("$Diffuse", "..\\Texture\\grass.dds");
+        pModel->materials[0].Set<XMFLOAT4>("$AmbientColor", XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$DiffuseColor", XMFLOAT4(0.4f, 0.4f, 0.4f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$SpecularColor", XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+        pModel->materials[0].Set<float>("$SpecularPower", 16.0f);
+        m_Land.SetModel(pModel);
+        m_Land.GetTransform().SetPosition(0.0f, -1.0f, 0.0f);
+    }
+    // 篱笆盒
+    {
+        Model* pModel = m_ModelManager.CreateFromGeometry("WireFence", Geometry::CreateBox(8.0f, 8.0f, 8.0f));
+        pModel->SetDebugObjectName("WireFence");
+        m_TextureManager.CreateFromFile("..\\Texture\\WireFence.dds");
+        pModel->materials[0].Set<std::string>("$Diffuse", "..\\Texture\\WireFence.dds");
+        pModel->materials[0].Set<XMFLOAT4>("$AmbientColor", XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$DiffuseColor", XMFLOAT4(0.6f, 0.6f, 0.6f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$SpecularColor", XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+        pModel->materials[0].Set<float>("$SpecularPower", 16.0f);
+        m_WireFence.SetModel(pModel);
+        m_WireFence.GetTransform().SetPosition(-2.0f, 2.0f, -4.0f);
+    }
+    
+    // ******************
+    // 初始化水面波浪
+    //
+    m_CpuWaves.InitResource(m_pd3dDevice.Get(), 256, 256, 5.0f, 5.0f, 0.03f, 0.625f, 2.0f, 0.2f, 0.05f, 0.1f);
+    m_GpuWaves.InitResource(m_pd3dDevice.Get(), 256, 256, 5.0f, 5.0f, 0.03f, 0.625f, 2.0f, 0.2f, 0.05f, 0.1f);
 
-    CD3D11_BUFFER_DESC bufferDesc(
-        (uint32_t)m_RandomNums.size() * sizeof(uint32_t),
-        D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS);
-    D3D11_SUBRESOURCE_DATA initData{};
-    initData.pSysMem = m_RandomNums.data();
-    m_pd3dDevice->CreateBuffer(&bufferDesc, &initData, m_pTypedBuffer1.GetAddressOf());
-    m_pd3dDevice->CreateBuffer(&bufferDesc, nullptr, m_pTypedBuffer2.GetAddressOf());
+    // ******************
+    // 初始化随机数生成器
+    //
+    m_RandEngine.seed(std::random_device()());
+    m_RowRange = std::uniform_int_distribution<UINT>(5, m_CpuWaves.RowCount() - 5);
+    m_ColRange = std::uniform_int_distribution<UINT>(5, m_CpuWaves.ColumnCount() - 5);
+    m_MagnitudeRange = std::uniform_real_distribution<float>(0.5f, 1.0f);
+    
+    // ******************
+    // 初始化摄像机
+    //
+    auto camera = std::make_shared<ThirdPersonCamera>();
+    m_pCamera = camera;
 
-    bufferDesc.BindFlags = 0;
-    bufferDesc.Usage = D3D11_USAGE_STAGING;
-    bufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-    m_pd3dDevice->CreateBuffer(&bufferDesc, nullptr, m_pTypedBufferCopy.GetAddressOf());
+    camera->SetViewPort(0.0f, 0.0f, (float)m_ClientWidth, (float)m_ClientHeight);
+    camera->SetTarget(XMFLOAT3(0.0f, 2.5f, 0.0f));
+    camera->SetDistance(20.0f);
+    camera->SetDistanceMinMax(10.0f, 90.0f);
+    camera->SetFrustum(XM_PI / 3, AspectRatio(), 1.0f, 1000.0f);
+    camera->SetRotationX(XM_PIDIV4);
 
-    bufferDesc = CD3D11_BUFFER_DESC(sizeof(CB), D3D11_BIND_CONSTANT_BUFFER, D3D11_USAGE_DYNAMIC, D3D11_CPU_ACCESS_WRITE);
-    m_pd3dDevice->CreateBuffer(&bufferDesc, nullptr, m_pConstantBuffer.GetAddressOf());
+    m_BasicEffect.SetViewMatrix(camera->GetViewMatrixXM());
+    m_BasicEffect.SetProjMatrix(camera->GetProjMatrixXM());
+    
+    // ******************
+    // 初始化不会变化的值
+    //
 
-    // 创建着色器资源视图
-    CD3D11_SHADER_RESOURCE_VIEW_DESC srvDesc(D3D11_SRV_DIMENSION_BUFFER, DXGI_FORMAT_R32_UINT, 0, (uint32_t)m_RandomNums.size());
-    m_pd3dDevice->CreateShaderResourceView(m_pTypedBuffer1.Get(), &srvDesc,
-        m_pDataSRV1.GetAddressOf());
-    m_pd3dDevice->CreateShaderResourceView(m_pTypedBuffer2.Get(), &srvDesc,
-        m_pDataSRV2.GetAddressOf());
+    // 方向光
+    DirectionalLight dirLight[3]{};
+    dirLight[0].ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+    dirLight[0].diffuse = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+    dirLight[0].specular = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+    dirLight[0].direction = XMFLOAT3(0.577f, -0.577f, 0.577f);
+    
+    dirLight[1].ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    dirLight[1].diffuse = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+    dirLight[1].specular = XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
+    dirLight[1].direction = XMFLOAT3(-0.577f, -0.577f, 0.577f);
+    
+    dirLight[2].ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    dirLight[2].diffuse = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+    dirLight[2].specular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    dirLight[2].direction = XMFLOAT3(0.0f, -0.707f, -0.707f);
+    for (int i = 0; i < 3; ++i)
+        m_BasicEffect.SetDirLight(i, dirLight[i]);
 
-    // 创建无序访问视图
-    D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-    uavDesc.Format = DXGI_FORMAT_R32_UINT;
-    uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-    uavDesc.Buffer.FirstElement = 0;
-    uavDesc.Buffer.Flags = 0;
-    uavDesc.Buffer.NumElements = (UINT)m_RandomNums.size();
-    m_pd3dDevice->CreateUnorderedAccessView(m_pTypedBuffer1.Get(), &uavDesc,
-        m_pDataUAV1.GetAddressOf());
-    m_pd3dDevice->CreateUnorderedAccessView(m_pTypedBuffer2.Get(), &uavDesc,
-        m_pDataUAV2.GetAddressOf());
+    // ******************
+    // 初始化雾效和绘制状态
+    //
 
-    // 创建计算着色器
-    ComPtr<ID3DBlob> blob;
-    D3DReadFileToBlob(L"HLSL\\BitonicSort_CS.cso", blob.ReleaseAndGetAddressOf());
-    m_pd3dDevice->CreateComputeShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, m_pBitonicSort_CS.GetAddressOf());
-
-    D3DReadFileToBlob(L"HLSL\\MatrixTranspose_CS.cso", blob.ReleaseAndGetAddressOf());
-    m_pd3dDevice->CreateComputeShader(blob->GetBufferPointer(), blob->GetBufferSize(), nullptr, m_pMatrixTranspose_CS.GetAddressOf());
-
+    m_BasicEffect.SetFogState(true);
+    m_BasicEffect.SetFogColor(XMFLOAT4(0.75f, 0.75f, 0.75f, 1.0f));
+    m_BasicEffect.SetFogStart(15.0f);
+    m_BasicEffect.SetFogRange(135.0f);
 
     return true;
 }
 
-void GameApp::SetConstants(UINT level, UINT descendMask, UINT matrixWidth, UINT matrixHeight)
-{
-    D3D11_MAPPED_SUBRESOURCE mappedData{};
-    m_pd3dImmediateContext->Map(m_pConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData);
-    CB cb = { level, descendMask, matrixWidth, matrixHeight };
-    memcpy_s(mappedData.pData, sizeof cb, &cb, sizeof cb);
-    m_pd3dImmediateContext->Unmap(m_pConstantBuffer.Get(), 0);
-    m_pd3dImmediateContext->CSSetConstantBuffers(0, 1, m_pConstantBuffer.GetAddressOf());
-}
-
-void GameApp::GPUSort()
-{
-    UINT size = (UINT)m_RandomNums.size();
-
-    m_pd3dImmediateContext->CSSetShader(m_pBitonicSort_CS.Get(), nullptr, 0);
-    m_pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, m_pDataUAV1.GetAddressOf(), nullptr);
-
-    // 按行数据进行排序，先排序level <= BLOCK_SIZE 的所有情况
-    for (UINT level = 2; level <= size && level <= BITONIC_BLOCK_SIZE; level *= 2)
-    {
-        SetConstants(level, level, 0, 0);
-        m_pd3dImmediateContext->Dispatch((size + BITONIC_BLOCK_SIZE - 1) / BITONIC_BLOCK_SIZE, 1, 1);
-    }
-
-    // 计算相近的矩阵宽高(宽>=高且需要都为2的次幂)
-    UINT matrixWidth = 2, matrixHeight = 2;
-    while (matrixWidth * matrixWidth < size)
-    {
-        matrixWidth *= 2;
-    }
-    matrixHeight = size / matrixWidth;
-
-    // 排序level > BLOCK_SIZE 的所有情况
-    ComPtr<ID3D11ShaderResourceView> pNullSRV;
-    for (UINT level = BITONIC_BLOCK_SIZE * 2; level <= size; level *= 2)
-    {
-        // 如果达到最高等级，则为全递增序列
-        if (level == size)
-        {
-            SetConstants(level / matrixWidth, level, matrixWidth, matrixHeight);
-        }
-        else
-        {
-            SetConstants(level / matrixWidth, level / matrixWidth, matrixWidth, matrixHeight);
-        }
-        // 先进行转置，并把数据输出到Buffer2
-        m_pd3dImmediateContext->CSSetShader(m_pMatrixTranspose_CS.Get(), nullptr, 0);
-        m_pd3dImmediateContext->CSSetShaderResources(0, 1, pNullSRV.GetAddressOf());
-        m_pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, m_pDataUAV2.GetAddressOf(), nullptr);
-        m_pd3dImmediateContext->CSSetShaderResources(0, 1, m_pDataSRV1.GetAddressOf());
-        m_pd3dImmediateContext->Dispatch(matrixWidth / TRANSPOSE_BLOCK_SIZE,
-            matrixHeight / TRANSPOSE_BLOCK_SIZE, 1);
-
-        // 对Buffer2排序列数据
-        m_pd3dImmediateContext->CSSetShader(m_pBitonicSort_CS.Get(), nullptr, 0);
-        m_pd3dImmediateContext->Dispatch(size / BITONIC_BLOCK_SIZE, 1, 1);
-
-        // 接着转置回来，并把数据输出到Buffer1
-        SetConstants(matrixWidth, level, matrixWidth, matrixHeight);
-        m_pd3dImmediateContext->CSSetShader(m_pMatrixTranspose_CS.Get(), nullptr, 0);
-        m_pd3dImmediateContext->CSSetShaderResources(0, 1, pNullSRV.GetAddressOf());
-        m_pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, m_pDataUAV1.GetAddressOf(), nullptr);
-        m_pd3dImmediateContext->CSSetShaderResources(0, 1, m_pDataSRV2.GetAddressOf());
-        m_pd3dImmediateContext->Dispatch(matrixWidth / TRANSPOSE_BLOCK_SIZE,
-            matrixHeight / TRANSPOSE_BLOCK_SIZE, 1);
-
-        // 对Buffer1排序剩余行数据
-        m_pd3dImmediateContext->CSSetShader(m_pBitonicSort_CS.Get(), nullptr, 0);
-        m_pd3dImmediateContext->Dispatch(size / BITONIC_BLOCK_SIZE, 1, 1);
-    }
-}

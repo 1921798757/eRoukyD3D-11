@@ -1,7 +1,8 @@
-# 构建输出目录（CMake 生成的所有文件）
+# ============ 构建输出 ============
+# CMake 生成的所有文件（编译中间产物 .obj/.pdb/.ilk 等都在 build/ 内）
 build/
 
-# Visual Studio 用户设置
+# ============ Visual Studio 用户设置 ============
 .vs/
 *.user
 *.suo
@@ -9,21 +10,14 @@ build/
 *.opensdf
 *.userosscache
 
-# Windows 系统文件
+# ============ Windows 系统文件 ============
 Thumbs.db
 Desktop.ini
 
-# Dear ImGui 运行时配置文件
-# imgui.ini
-
-# ImGui 目录只追踪源码文件（.h 和 .cpp）
-ImGui/*
-!ImGui/*.h
-!ImGui/*.cpp
-!ImGui/CMakeLists.txt
-
-# 编译中间文件
-*.obj
+# ============ 编译中间文件 ============
+# 注意：这里故意不写全局 *.obj ——
+# Model/ 下的 .obj 是 3D 模型资源，全局 *.obj 会把它们误忽略掉。
+# 正常 CMake 构建产生的 .obj 都在 build/ 里（上面已整体忽略）。
 *.ilk
 *.pdb
 *.idb
@@ -32,3 +26,15 @@ ImGui/*
 *.tlog
 *.log
 *.lastbuildstate
+
+# ============ ImGui ============
+# ImGui 目录只追踪源码（.h / .cpp）和 CMakeLists.txt
+ImGui/*
+!ImGui/*.h
+!ImGui/*.cpp
+!ImGui/CMakeLists.txt
+
+# ============ Dear ImGui 运行时配置 ============
+# 运行时生成的窗口布局配置，一般不入库。
+# 如需提交共享布局，保持下面这行被注释即可。
+# imgui.ini
