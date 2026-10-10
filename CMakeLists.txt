@@ -1,62 +1,131 @@
-cmake_minimum_required(VERSION 3.14)
-project("27_Bitonic_Sort")
+cmake_minimum_required (VERSION 3.14)
 
+# ------------------------------------------------------------------------------
+# 用户配置
+# ------------------------------------------------------------------------------
+# 设置解决方案名
+project("28_Waves")
+# 设置项目名(不能有空格) 
+set(TARGET_NAME "28_Waves")
+# 设置HLSL文件的存放位置
+set(HLSL_DIR "HLSL")
+# Win7系统设置为ON
+set(WIN7_SYSTEM OFF)
+# 如果需要编译期编译着色器，设置为ON
+# 要求着色器命名格式为：ShaderName_ShaderType.hlsl
+# ShaderType为右边任意一种：VS, vs, HS, hs, DS, ds, GS, gs, PS, ps, CS, cs
+set(SHADER_STATIC_COMPILE ON) 
+# 使用ImGui时设置为ON
+# 需要将项目中的ImGui文件夹复制进来，保留*.h/*.cpp/CMakeLists.txt
+set(USE_IMGUI ON)
+# 使用Assimp时设置为ON
+# 需要将解压的assimp文件夹内CMakeList.txt所在的全部文件复制到当前项目的Assimp文件夹内
+set(USE_ASSIMP ON)
+
+# ------------------------------------------------------------------------------
+# 项目细节配置(需熟悉CMake)
+# ------------------------------------------------------------------------------
 set(CMAKE_CXX_STANDARD 17)
+
+# 强制使用动态运行时库（/MD 或 /MDd），避免 LNK4098 警告和运行时崩溃
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+
 add_compile_definitions(UNICODE _UNICODE)
-if (WIN7_SYSTEM_SUPPORT MATCHES ON)
+if (${WIN7_SYSTEM})
     add_compile_definitions(_WIN32_WINNT=0x601)
 endif()
-
 add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+# 并行编译时避免多个CL.EXE同时写入PDB文件导致的C1041错误
+add_compile_options("$<$<CXX_COMPILER_ID:MSVC>:/FS>")
 
+# 引入当前目录下的 Common 头文件目录
 include_directories(Common)
 
-aux_source_directory(. DIR_SRCS)
-file(GLOB HLSL_FILES HLSL/*.hlsl HLSL/*.hlsli)
+# 拷贝着色器目录到输出目录
+file(COPY ${HLSL_DIR} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# 新增：拷贝纹理目录到输出目录
+file(COPY Texture DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# 拷贝模型目录到输出目录
+file(COPY Model DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+# 收集当前目录下的源码、头文件以及 HLSL 目录下的着色器文件
+file(GLOB HLSL_FILES ${HLSL_DIR}/*.hlsl ${HLSL_DIR}/*.hlsli)
 file(GLOB HEADER_FILES ./*.h)
+# 收集当前目录 Common 下的代码文件，精确匹配后缀，避免混入奇怪的文件
+file(GLOB COMMON_FILES Common/*.cpp Common/*.h Common/*.hpp Common/*.inl)
 
-# 收集 Common 目录下的源文件
-file(GLOB COMMON_FILES Common/*.cpp Common/*.h)
+aux_source_directory(. DIR_SRCS)
 
-foreach(HLSL_FILE ${HLSL_FILES})
+# 创建可执行文件并链接库 (直接将HLSL_FILES放入可执行文件，确保不管是否开启静态编译，在IDE中都始终可见)
+add_executable(${TARGET_NAME} WIN32 ${DIR_SRCS} ${HEADER_FILES} ${HLSL_FILES} ${COMMON_FILES})
+target_link_libraries(${TARGET_NAME} d3d11.lib dxgi.lib dxguid.lib D3DCompiler.lib winmm.lib d2d1.lib dwrite.lib windowscodecs.lib ole32.lib)
 
-    get_filename_component(HLSL_FDIR ${HLSL_FILE} DIRECTORY)
-    get_filename_component(HLSL_FBASENAME_WE ${HLSL_FILE} NAME_WE)
-    string(CONCAT HLSL_FNAME_WE ${HLSL_FDIR} / ${HLSL_FBASENAME_WE})
-
-    string(LENGTH ${HLSL_FBASENAME_WE} LEN_FNAME_WE)
-    math(EXPR LEN_FNAME_WE "${LEN_FNAME_WE}-2")
-    string(SUBSTRING ${HLSL_FBASENAME_WE} ${LEN_FNAME_WE} 2 ENTRY_POINT)
-    string(TOLOWER ${ENTRY_POINT} SHADER_TYPE)
-
-    if ("${SHADER_TYPE}" STREQUAL "vs") 
-        set(SHADER_TYPE "Vertex")
-    elseif("${SHADER_TYPE}" STREQUAL "hs") 
-        set(SHADER_TYPE "Hull")
-    elseif("${SHADER_TYPE}" STREQUAL "ds") 
-        set(SHADER_TYPE "Domain")
-    elseif("${SHADER_TYPE}" STREQUAL "gs") 
-        set(SHADER_TYPE "Geometry")
-    elseif("${SHADER_TYPE}" STREQUAL "ps")
-        set(SHADER_TYPE "Pixel")
-    elseif("${SHADER_TYPE}" STREQUAL "cs")
-        set(SHADER_TYPE "Compute")
-    endif()
-    set_source_files_properties(${HLSL_FILE} PROPERTIES
-                                VS_SHADER_OBJECT_FILE_NAME HLSL/${HLSL_FBASENAME_WE}.cso
-                                VS_SHADER_TYPE ${SHADER_TYPE}
-                                VS_SHADER_MODEL 5.0
-                                VS_SHADER_ENTRYPOINT ${ENTRY_POINT}
-                                VS_SHADER_DISABLE_OPTIMIZATIONS $<$<CONFIG:Debug>:true>
-                                VS_SHADER_ENABLE_DEBUG $<$<CONFIG:Debug>:true>)
-endforeach()
-
-add_executable(27_Bitonic_Sort WIN32 ${DIR_SRCS} ${HEADER_FILES} ${HLSL_FILES} ${COMMON_FILES})
-target_link_libraries(27_Bitonic_Sort d3d11.lib dxgi.lib dxguid.lib D3DCompiler.lib winmm.lib)
-
-source_group("Shaders" FILES ${HLSL_FILES})
+# 在 IDE 中对 HLSL 文件进行分组显示
+source_group("HLSL Files" FILES ${HLSL_FILES})
+# 在 IDE 中对 Common 文件进行分组显示
 source_group("Common" FILES ${COMMON_FILES})
-set_target_properties(27_Bitonic_Sort PROPERTIES OUTPUT_NAME "27 Bitonic Sort")
 
-set_target_properties(27_Bitonic_Sort PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
-set_target_properties(27_Bitonic_Sort PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
+# 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "28_Waves")
+set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
+set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
+
+
+# ------------------------------------------------------------------------------
+# 可选功能模块配置
+# ------------------------------------------------------------------------------
+
+# 着色器静态编译
+if (${SHADER_STATIC_COMPILE})
+    foreach(HLSL_FILE ${HLSL_FILES})
+        get_filename_component(HLSL_FDIR ${HLSL_FILE} DIRECTORY)
+        get_filename_component(HLSL_FBASENAME_WE ${HLSL_FILE} NAME_WE)
+        string(CONCAT HLSL_FNAME_WE ${HLSL_FDIR} / ${HLSL_FBASENAME_WE})
+        string(LENGTH ${HLSL_FBASENAME_WE} LEN_FNAME_WE)
+        math(EXPR LEN_FNAME_WE "${LEN_FNAME_WE}-2")
+        string(SUBSTRING ${HLSL_FBASENAME_WE} ${LEN_FNAME_WE} 2 ENTRY_POINT)
+        string(TOLOWER ${ENTRY_POINT} SHADER_TYPE)
+        
+        if ("${SHADER_TYPE}" STREQUAL "vs") 
+            set(SHADER_TYPE "Vertex")
+        elseif("${SHADER_TYPE}" STREQUAL "hs") 
+            set(SHADER_TYPE "Hull")
+        elseif("${SHADER_TYPE}" STREQUAL "ds") 
+            set(SHADER_TYPE "Domain")
+        elseif("${SHADER_TYPE}" STREQUAL "gs") 
+            set(SHADER_TYPE "Geometry")
+        elseif("${SHADER_TYPE}" STREQUAL "ps")
+            set(SHADER_TYPE "Pixel")
+        elseif("${SHADER_TYPE}" STREQUAL "cs")
+            set(SHADER_TYPE "Compute")
+        endif()
+        
+        set_source_files_properties(${HLSL_FILE} PROPERTIES
+                                    VS_SHADER_OBJECT_FILE_NAME HLSL/${HLSL_FBASENAME_WE}.cso
+                                    VS_SHADER_TYPE ${SHADER_TYPE}
+                                    VS_SHADER_MODEL 5.0
+                                    VS_SHADER_ENTRYPOINT ${ENTRY_POINT}
+                                    VS_SHADER_DISABLE_OPTIMIZATIONS $<$<CONFIG:Debug>:true>
+                                    VS_SHADER_ENABLE_DEBUG $<$<CONFIG:Debug>:true>)
+    endforeach()
+endif()
+
+# ImGui 支持
+if (${USE_IMGUI})
+    add_subdirectory(ImGui)
+    target_compile_definitions(${TARGET_NAME} PRIVATE USE_IMGUI)
+    target_link_libraries(${TARGET_NAME} ImGui)
+    file(COPY imgui.ini DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+endif()
+
+# Assimp 支持
+if (${USE_ASSIMP})
+    set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
+    set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_INSTALL OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_INJECT_DEBUG_POSTFIX OFF CACHE BOOL "" FORCE) 
+    add_subdirectory("assimp")
+    target_link_libraries(${TARGET_NAME} assimp)
+endif()

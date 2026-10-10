@@ -1,26 +1,50 @@
-//***************************************************************************************
-// WinMin.h by X_Jun(MKXJun) (C) 2018-2022 All Rights Reserved.
-// Licensed under the MIT License.
-//
-// 最小化Windows头文件冲突
-// Minimize Windows header conflicts
-//***************************************************************************************
 
 #pragma once
 
-#ifndef WINMIN_H
-#define WINMIN_H
+#ifndef WINMAIN_H
+#define WINMAIN_H
 
-// 避免Windows.h包含一些不常用的头文件
-#ifndef WIN32_LEAN_AND_MEAN
+// 定义下面这些宏以去掉Windows中那些没用的组件
+
+#ifndef FULL_WINTARD
 #define WIN32_LEAN_AND_MEAN
+#define NOGDICAPMASKS
+#define NOSYSMETRICS
+#define NOMENUS
+#define NOICONS
+#define NOSYSCOMMANDS
+#define NORASTEROPS
+#define OEMRESOURCE
+#define NOATOM
+#define NOCLIPBOARD
+#define NOCOLOR
+#define NOCTLMGR
+#define NODRAWTEXT
+#define NOKERNEL
+// #define NONLS
+#define NOMEMMGR
+#define NOMETAFILE
+#define NOOPENFILE
+#define NOSCROLL
+#define NOSERVICE
+#define NOSOUND
+#define NOTEXTMETRIC
+#define NOWH
+#define NOCOMM
+#define NOKANJI
+#define NOHELP
+#define NOPROFILER
+#define NODEFERWINDOWPOS
+#define NOMCX
+#define NORPC
+#define NOPROXYSTUB
+#define NOIMAGE
+#define NOTAPE
 #endif
 
-// 避免min/max宏与std::min/std::max冲突
-#ifndef NOMINMAX
 #define NOMINMAX
-#endif
+
 
 #include <Windows.h>
 
-#endif // WINMIN_H
+#endif
