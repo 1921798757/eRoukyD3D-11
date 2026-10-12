@@ -70,7 +70,7 @@ public:
 
     // 顺序无关透明度存储
     void SetRenderOITStorage(
-        ID3D11UnorderedAccessView* flBuffer, 
+        ID3D11UnorderedAccessView* flBuffer,
         ID3D11UnorderedAccessView* startOffsetBuffer,
         uint32_t renderTargetWidth);
 
@@ -112,6 +112,66 @@ private:
     std::unique_ptr<Impl> pImpl;
 };
 
+class PostProcessEffect
+{
+public:
 
+    PostProcessEffect();
+    ~PostProcessEffect();
+
+    PostProcessEffect(PostProcessEffect&& moveFrom) noexcept;
+    PostProcessEffect& operator=(PostProcessEffect&& moveFrom) noexcept;
+
+    // 获取单例
+    static PostProcessEffect& Get();
+
+    // 初始化所需资源
+    bool InitAll(ID3D11Device* device);
+
+    //
+    // 将两张图片进行分量相乘
+    // input2为nullptr则直通
+    //
+    void RenderComposite(
+        ID3D11DeviceContext* deviceContext,
+        ID3D11ShaderResourceView* input1,
+        ID3D11ShaderResourceView* input2,
+        ID3D11RenderTargetView* output,
+        const D3D11_VIEWPORT& vp
+    );
+
+    //
+    // Sobel滤波
+    //
+    void ComputeSobel(
+        ID3D11DeviceContext* deviceContext,
+        ID3D11ShaderResourceView* input,
+        ID3D11UnorderedAccessView* output,
+        uint32_t width, uint32_t height);
+
+    //
+    // 高斯滤波
+    //
+
+    // size: 奇数, 3-19
+    void SetBlurKernelSize(int size);
+    void SetBlurSigma(float sigma);
+
+    void ComputeGaussianBlurX(
+        ID3D11DeviceContext* deviceContext,
+        ID3D11ShaderResourceView* input,
+        ID3D11UnorderedAccessView* output,
+        uint32_t width, uint32_t height);
+
+    void ComputeGaussianBlurY(
+        ID3D11DeviceContext* deviceContext,
+        ID3D11ShaderResourceView* input,
+        ID3D11UnorderedAccessView* output,
+        uint32_t width, uint32_t height);
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> pImpl;
+};
 
 #endif
