@@ -51,15 +51,6 @@ struct VertexPosNormalTex
     float2 tex : TEXCOORD;
 };
 
-struct InstancePosNormalTex
-{
-    float3 posL : POSITION;
-    float3 normalL : NORMAL;
-    float2 tex : TEXCOORD;
-    matrix world : World;
-    matrix worldInvTranspose : WorldInvTranspose;
-};
-
 struct VertexPosHWNormalTex
 {
     float4 posH : SV_POSITION;

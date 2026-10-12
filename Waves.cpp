@@ -60,7 +60,7 @@ void CpuWaves::InitResource(ID3D11Device* device,
     uint32_t rows, uint32_t cols, float texU, float texV, float timeStep, float spatialStep,
     float waveSpeed, float damping, float flowSpeedX, float flowSpeedY)
 {
-    Waves::InitResource(device, rows, cols, texU, texV, timeStep,
+    Waves::InitResource(device, rows, cols, texU, texV, timeStep, 
         spatialStep, waveSpeed, damping, flowSpeedX, flowSpeedY, true);
 
     // 取出顶点数据
@@ -75,7 +75,7 @@ void CpuWaves::InitResource(ID3D11Device* device,
 void CpuWaves::Update(float dt)
 {
     m_AccumulateTime += dt;
-
+    
     auto& texOffset = m_Model.materials[0].Get<XMFLOAT2>("$TexOffset");
     texOffset.x += m_FlowSpeedX * dt;
     texOffset.y += m_FlowSpeedY * dt;
@@ -170,7 +170,7 @@ void CpuWaves::Draw(ID3D11DeviceContext* deviceContext, IEffect& effect)
 std::unique_ptr<EffectHelper> GpuWaves::m_pEffectHelper = nullptr;
 
 void GpuWaves::InitResource(ID3D11Device* device,
-    uint32_t rows, uint32_t cols, float texU, float texV,
+    uint32_t rows, uint32_t cols, float texU, float texV, 
     float timeStep, float spatialStep, float waveSpeed, float damping, float flowSpeedX, float flowSpeedY)
 {
     // 初始化特效
@@ -191,7 +191,7 @@ void GpuWaves::InitResource(ID3D11Device* device,
         HR(m_pEffectHelper->AddEffectPass("WavesUpdate", device, &passDesc));
     }
 
-    Waves::InitResource(device, rows, cols, texU, texV, timeStep,
+    Waves::InitResource(device, rows, cols, texU, texV, timeStep, 
         spatialStep, waveSpeed, damping, flowSpeedX, flowSpeedY, false);
 
 

@@ -14,7 +14,6 @@
 #include <MeshData.h>
 #include <LightHelper.h>
 
-
 class BasicEffect : public IEffect, public IEffectTransform,
     public IEffectMaterial, public IEffectMeshData
 {
@@ -60,7 +59,32 @@ public:
     void SetRenderDefault();
     // 透明混合绘制
     void SetRenderTransparent();
-    
+
+    // OIT Pass1
+
+    // 清空OIT缓冲区
+    void ClearOITBuffers(
+        ID3D11DeviceContext* deviceContext,
+        ID3D11UnorderedAccessView* flBuffer,
+        ID3D11UnorderedAccessView* startOffsetBuffer);
+
+    // 顺序无关透明度存储
+    void SetRenderOITStorage(
+        ID3D11UnorderedAccessView* flBuffer, 
+        ID3D11UnorderedAccessView* startOffsetBuffer,
+        uint32_t renderTargetWidth);
+
+    // OIT Pass2
+
+    // 完成OIT渲染
+    void RenderOIT(
+        ID3D11DeviceContext* deviceContext,
+        ID3D11ShaderResourceView* flBuffer,
+        ID3D11ShaderResourceView* startOffsetBuffer,
+        ID3D11ShaderResourceView* input,
+        ID3D11RenderTargetView* output,
+        const D3D11_VIEWPORT& vp);
+
     void SetTextureDisplacement(ID3D11ShaderResourceView* textureDisplacement);
 
     // 各种类型灯光允许的最大数目
@@ -77,6 +101,7 @@ public:
     void SetFogColor(const DirectX::XMFLOAT4& fogColor);
     void SetFogRange(float fogRange);
 
+
     void SetWavesStates(bool enabled, float gridSpatialStep = 0.0f);
 
     // 应用常量缓冲区和纹理资源的变更
@@ -86,5 +111,7 @@ private:
     class Impl;
     std::unique_ptr<Impl> pImpl;
 };
+
+
 
 #endif

@@ -95,7 +95,7 @@ public:
     CpuWaves& operator=(CpuWaves&&) = default;
 
     void InitResource(
-        ID3D11Device* device,
+        ID3D11Device* device,           
         uint32_t rows,                  // 顶点行数
         uint32_t cols,                  // 顶点列数
         float texU,                     // 纹理坐标U方向最大值
@@ -108,7 +108,7 @@ public:
         float flowSpeedY);              // 水流Y方向速度
 
     void Update(float dt);
-
+    
     // 在顶点[i][j]处激起高度为magnitude的波浪
     // 仅允许在1 < i < rows和1 < j < cols的范围内激起
     void Disturb(uint32_t i, uint32_t j, float magnitude);
@@ -116,7 +116,7 @@ public:
     void Draw(ID3D11DeviceContext* deviceContext, IEffect& effect);
 
 private:
-
+    
     std::vector<DirectX::XMFLOAT3> m_CurrSolution;      // 保存当前模拟结果的顶点二维数组的一维展开
     std::vector<DirectX::XMFLOAT3> m_CurrNormals;       // 保存当前模拟结果的顶点法线二维数组的一维展开
     std::vector<DirectX::XMFLOAT3> m_PrevSolution;      // 保存上一次模拟结果的顶点位置二维数组的一维展开
