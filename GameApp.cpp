@@ -26,11 +26,15 @@ bool GameApp::Init()
     if (!m_BasicEffect.InitAll(m_pd3dDevice.Get()))
         return false;
 
-    if (!m_PostProcessEffect.InitAll(m_pd3dDevice.Get()))
+    if (!m_SkyboxEffect.InitAll(m_pd3dDevice.Get()))
+        return false;
+
+    if (!m_ShadowEffect.InitAll(m_pd3dDevice.Get()))
         return false;
 
     if (!InitResource())
         return false;
+
 
     return true;
 }
@@ -40,18 +44,10 @@ void GameApp::OnResize()
     D3DApp::OnResize();
 
     m_pDepthTexture = std::make_unique<Depth2D>(m_pd3dDevice.Get(), m_ClientWidth, m_ClientHeight);
-    m_pFLStaticNodeBuffer = std::make_unique<StructuredBuffer<FLStaticNode>>(m_pd3dDevice.Get(), m_ClientWidth * m_ClientHeight * 4);
-    m_pStartOffsetBuffer = std::make_unique<ByteAddressBuffer>(m_pd3dDevice.Get(), m_ClientWidth * m_ClientHeight);
-    m_pLitTexture = std::make_unique<Texture2D>(m_pd3dDevice.Get(), m_ClientWidth, m_ClientHeight, 
-        DXGI_FORMAT_R8G8B8A8_UNORM, 1, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS);
-    m_pTempTexture = std::make_unique<Texture2D>(m_pd3dDevice.Get(), m_ClientWidth, m_ClientHeight, 
-        DXGI_FORMAT_R8G8B8A8_UNORM, 1, D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET | D3D11_BIND_UNORDERED_ACCESS);
+    m_pLitTexture = std::make_unique<Texture2D>(m_pd3dDevice.Get(), m_ClientWidth, m_ClientHeight, DXGI_FORMAT_R8G8B8A8_UNORM);
 
     m_pDepthTexture->SetDebugObjectName("DepthTexture");
-    m_pFLStaticNodeBuffer->SetDebugObjectName("FLStaticNodeBuffer");
-    m_pStartOffsetBuffer->SetDebugObjectName("StartOffsetBuffer");
     m_pLitTexture->SetDebugObjectName("LitTexture");
-    m_pTempTexture->SetDebugObjectName("TempTexture");
 
     // 摄像机变更显示
     if (m_pCamera != nullptr)
@@ -59,72 +55,74 @@ void GameApp::OnResize()
         m_pCamera->SetFrustum(XM_PI / 3, AspectRatio(), 1.0f, 1000.0f);
         m_pCamera->SetViewPort(0.0f, 0.0f, (float)m_ClientWidth, (float)m_ClientHeight);
         m_BasicEffect.SetProjMatrix(m_pCamera->GetProjMatrixXM());
+        m_SkyboxEffect.SetProjMatrix(m_pCamera->GetProjMatrixXM());
     }
 }
 
 void GameApp::UpdateScene(float dt)
 {
-    auto cam3rd = std::dynamic_pointer_cast<ThirdPersonCamera>(m_pCamera);
-    ImGuiIO& io = ImGui::GetIO();
+    static const DirectX::XMFLOAT3 lightDirs[] = {
+        XMFLOAT3(1.0f / sqrtf(2.0f), -1.0f / sqrtf(2.0f), 0.0f),
+        XMFLOAT3(3.0f / sqrtf(13.0f), -2.0f / sqrtf(13.0f), 0.0f),
+        XMFLOAT3(2.0f / sqrtf(5.0f), -1.0f / sqrtf(5.0f), 0.0f),
+        XMFLOAT3(3.0f / sqrtf(10.0f), -1.0f / sqrtf(10.0f), 0.0f),
+        XMFLOAT3(4.0f / sqrtf(17.0f), -1.0f / sqrtf(17.0f), 0.0f)
+    };
 
-    // ******************
-    // 第三人称摄像机的操作
-    //
-    if (ImGui::IsMouseDragging(ImGuiMouseButton_Right))
+    m_CameraController.Update(dt);
+
+    if (ImGui::Begin("Shadow Mapping"))
     {
-        cam3rd->RotateX(io.MouseDelta.y * 0.01f);
-        cam3rd->RotateY(io.MouseDelta.x * 0.01f);
-    }
-    cam3rd->Approach(-io.MouseWheel * 1.0f);
+        ImGui::Checkbox("Animate Light", &m_UpdateLight);
+        ImGui::Checkbox("Enable Normal map", &m_EnableNormalMap);
+        if (ImGui::SliderInt("Light Slope Level", &m_SlopeIndex, 0, 4))
+        {
+            m_OriginalLightDirs[0] = lightDirs[m_SlopeIndex];
+        }
+        static float depthBias = 0.005f;
+        if (ImGui::SliderFloat("Depth Bias", &depthBias, 0.0f, 0.02f, "%.3f"))
+        {
+            m_BasicEffect.SetDepthBias(depthBias);
+        }
 
+        ImGui::Checkbox("Enable Debug", &m_EnableDebug);
+    }
+    ImGui::End();
+
+    m_SkyboxEffect.SetViewMatrix(m_pCamera->GetViewMatrixXM());
     m_BasicEffect.SetViewMatrix(m_pCamera->GetViewMatrixXM());
     m_BasicEffect.SetEyePos(m_pCamera->GetPosition());
 
-    if (ImGui::Begin("Blur and Sobel"))
+    // 更新光照
+    static float theta = 0;
+    if (m_UpdateLight)
     {
-        ImGui::Checkbox("Enable OIT", &m_EnabledOIT);
-        if (ImGui::Checkbox("Enable Fog", &m_EnabledFog))
-        {
-            m_BasicEffect.SetFogState(m_EnabledFog);
-        }
-        static int mode = m_BlurMode;
-        static const char* modeStrs[] = {
-            "Sobel Mode",
-            "Blur Mode"
-        };
-        if (ImGui::Combo("Mode", &mode, modeStrs, ARRAYSIZE(modeStrs)))
-            m_BlurMode = mode;
-
-        if (m_BlurMode)
-        {
-            if (ImGui::SliderInt("Blur Radius", &m_BlurRadius, 1, 15))
-            {
-                m_PostProcessEffect.SetBlurKernelSize(m_BlurRadius * 2 + 1);
-            }
-            if (ImGui::SliderFloat("Blur Sigma", &m_BlurSigma, 1.0f, 20.0f))
-            {
-                m_PostProcessEffect.SetBlurSigma(m_BlurSigma);
-            }
-            ImGui::SliderInt("Blur Times", &m_BlurTimes, 0, 5);
-        }
+        theta += dt * XM_2PI / 40.0f;
     }
 
-    ImGui::End();
-    ImGui::Render();
-
-    // 每1/4s生成一个随机水波
-    if (m_Timer.TotalTime() - m_BaseTime >= 0.25f)
+    for (int i = 0; i < 3; ++i)
     {
-        m_BaseTime += 0.25f;
-        m_GpuWaves.Disturb(m_pd3dImmediateContext.Get(),
-            m_RowRange(m_RandEngine), m_ColRange(m_RandEngine),
-            m_MagnitudeRange(m_RandEngine));
-
+        XMVECTOR dirVec = XMLoadFloat3(&m_OriginalLightDirs[i]);
+        dirVec = XMVector3Transform(dirVec, XMMatrixRotationY(theta));
+        XMStoreFloat3(&m_DirLights[i].direction, dirVec);
+        m_BasicEffect.SetDirLight(i, m_DirLights[i]);
     }
 
-    // 更新波浪
-    m_GpuWaves.Update(m_pd3dImmediateContext.Get(), dt);
-
+    //
+    // 投影区域为正方体，以原点为中心，以方向光为+Z朝向
+    //
+    XMVECTOR dirVec = XMLoadFloat3(&m_DirLights[0].direction);
+    XMMATRIX LightView = XMMatrixLookAtLH(dirVec * 20.0f * (-2.0f), g_XMZero, g_XMIdentityR1);
+    m_ShadowEffect.SetViewMatrix(LightView);
+    
+    // 将NDC空间 [-1, +1]^2 变换到纹理坐标空间 [0, 1]^2
+    static XMMATRIX T(
+        0.5f, 0.0f, 0.0f, 0.0f,
+        0.0f, -0.5f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.5f, 0.5f, 0.0f, 1.0f);
+    // S = V * P * T
+    m_BasicEffect.SetShadowTransformMatrix(LightView * XMMatrixOrthographicLH(40.0f, 40.0f, 20.0f, 60.0f) * T);
 }
 
 void GameApp::DrawScene()
@@ -138,225 +136,233 @@ void GameApp::DrawScene()
         m_pd3dDevice->CreateRenderTargetView(pBackBuffer.Get(), &rtvDesc, m_pRenderTargetViews[m_FrameCount].ReleaseAndGetAddressOf());
     }
 
-    float gray[4] = { 0.75f, 0.75f, 0.75f, 1.0f };
-    ID3D11RenderTargetView* pRTVs[1] = { m_EnabledOIT ? m_pTempTexture->GetRenderTarget() : m_pLitTexture->GetRenderTarget() };
-    m_pd3dImmediateContext->ClearRenderTargetView(*pRTVs, gray);
-    m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthTexture->GetDepthStencil(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
-    m_pd3dImmediateContext->OMSetRenderTargets(1, pRTVs, m_pDepthTexture->GetDepthStencil());
-    D3D11_VIEWPORT viewport = m_pCamera->GetViewPort();
-    m_pd3dImmediateContext->RSSetViewports(1, &viewport);
+    RenderShadow();
+    RenderForward();
+    RenderSkybox();
 
-    // ******************
-    // 1. 绘制不透明对象
-    //
-    m_BasicEffect.SetRenderDefault();
-    m_Land.Draw(m_pd3dImmediateContext.Get(), m_BasicEffect);
-
-    // ******************
-    // 2. 存放透明物体的像素片元
-    //
-    if (m_EnabledOIT)
+    if (m_EnableDebug)
     {
-        m_BasicEffect.ClearOITBuffers(
-            m_pd3dImmediateContext.Get(),
-            m_pFLStaticNodeBuffer->GetUnorderedAccess(),
-            m_pStartOffsetBuffer->GetUnorderedAccess()
-        );
-        m_BasicEffect.SetRenderOITStorage(
-            m_pFLStaticNodeBuffer->GetUnorderedAccess(),
-            m_pStartOffsetBuffer->GetUnorderedAccess(),
-            m_ClientWidth);
-    }
-    else
-    {
-        m_BasicEffect.SetRenderTransparent();
-    }
-    m_RedBox.Draw(m_pd3dImmediateContext.Get(), m_BasicEffect);
-    m_YellowBox.Draw(m_pd3dImmediateContext.Get(), m_BasicEffect);
-    m_GpuWaves.Draw(m_pd3dImmediateContext.Get(), m_BasicEffect);
-
-    // 清空
-    m_pd3dImmediateContext->OMSetRenderTargets(0, nullptr, nullptr);
-
-    // ******************
-    // 3. 进行透明混合
-    //
-    if (m_EnabledOIT)
-    {
-        m_BasicEffect.RenderOIT(
-            m_pd3dImmediateContext.Get(),
-            m_pFLStaticNodeBuffer->GetShaderResource(),
-            m_pStartOffsetBuffer->GetShaderResource(),
-            m_pTempTexture->GetShaderResource(),
-            m_pLitTexture->GetRenderTarget(),
-            m_pCamera->GetViewPort()
-        );
-    }
-    
-    // ******************
-    // 4. 滤波
-    //
-
-    // 高斯滤波
-    if (m_BlurMode == 1)
-    {
-        for (int i = 0; i < m_BlurTimes; ++i)
+        if (ImGui::Begin("Depth Buffer", &m_EnableDebug))
         {
-            m_PostProcessEffect.ComputeGaussianBlurX(m_pd3dImmediateContext.Get(), 
-                m_pLitTexture->GetShaderResource(), 
-                m_pTempTexture->GetUnorderedAccess(), 
-                m_ClientWidth, m_ClientHeight);
-            m_PostProcessEffect.ComputeGaussianBlurY(m_pd3dImmediateContext.Get(),
-                m_pTempTexture->GetShaderResource(),
-                m_pLitTexture->GetUnorderedAccess(),
-                m_ClientWidth, m_ClientHeight);
+            CD3D11_VIEWPORT vp(0.0f, 0.0f, (float)m_pDebugShadowTexture->GetWidth(), (float)m_pDebugShadowTexture->GetHeight());
+            m_ShadowEffect.RenderDepthToTexture(
+                m_pd3dImmediateContext.Get(),
+                m_pShadowMapTexture->GetShaderResource(),
+                m_pDebugShadowTexture->GetRenderTarget(),
+                vp);
+            
+            ImVec2 winSize = ImGui::GetWindowSize();
+            float smaller = (std::min)(winSize.x - 20, winSize.y - 36);
+            ImGui::Image(m_pDebugShadowTexture->GetShaderResource(), ImVec2(smaller, smaller));
         }
-
-        // 直通(RGB->sRGB)
-        m_PostProcessEffect.RenderComposite(m_pd3dImmediateContext.Get(),
-            m_pLitTexture->GetShaderResource(),
-            nullptr,
-            GetBackBufferRTV(),
-            m_pCamera->GetViewPort());
+        ImGui::End();
     }
-    // Sobel滤波
-    else
-    {
-        m_PostProcessEffect.ComputeSobel(m_pd3dImmediateContext.Get(),
-            m_pLitTexture->GetShaderResource(),
-            m_pTempTexture->GetUnorderedAccess(),
-            m_ClientWidth, m_ClientHeight);
-        m_PostProcessEffect.RenderComposite(m_pd3dImmediateContext.Get(),
-            m_pLitTexture->GetShaderResource(),
-            m_pTempTexture->GetShaderResource(),
-            GetBackBufferRTV(),
-            m_pCamera->GetViewPort());
-    }
+    ImGui::Render();
 
-    pRTVs[0] = GetBackBufferRTV();
+    ID3D11RenderTargetView* pRTVs[]{ GetBackBufferRTV() };
     m_pd3dImmediateContext->OMSetRenderTargets(1, pRTVs, nullptr);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+
 
     HR(m_pSwapChain->Present(0, m_IsDxgiFlipModel ? DXGI_PRESENT_ALLOW_TEARING : 0));
 }
 
+void GameApp::RenderShadow()
+{
+    CD3D11_VIEWPORT shadowViewport(0.0f, 0.0f, (float)m_pShadowMapTexture->GetWidth(), (float)m_pShadowMapTexture->GetHeight());
+    m_pd3dImmediateContext->ClearDepthStencilView(m_pShadowMapTexture->GetDepthStencil(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+    m_pd3dImmediateContext->OMSetRenderTargets(0, nullptr, m_pShadowMapTexture->GetDepthStencil());
+    m_pd3dImmediateContext->RSSetViewports(1, &shadowViewport);
 
+
+    m_ShadowEffect.SetRenderDepthOnly();
+    DrawScene<ShadowEffect>(m_ShadowEffect);
+}
+void GameApp::RenderForward()
+{
+    float black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    ID3D11RenderTargetView* pRTVs[]{ m_pLitTexture->GetRenderTarget() };
+    m_pd3dImmediateContext->ClearRenderTargetView(pRTVs[0], black);
+    m_pd3dImmediateContext->ClearDepthStencilView(m_pDepthTexture->GetDepthStencil(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+    m_pd3dImmediateContext->OMSetRenderTargets(1, pRTVs, m_pDepthTexture->GetDepthStencil());
+    D3D11_VIEWPORT vp = m_pCamera->GetViewPort();
+    m_pd3dImmediateContext->RSSetViewports(1, &vp);
+
+    m_BasicEffect.SetTextureShadowMap(m_pShadowMapTexture->GetShaderResource());
+
+    if (m_EnableNormalMap)
+        m_BasicEffect.SetRenderWithNormalMap();
+    else
+        m_BasicEffect.SetRenderDefault();
+    
+    DrawScene<BasicEffect>(m_BasicEffect, [](BasicEffect& effect, ID3D11DeviceContext* deviceContext) {
+        effect.SetRenderDefault();
+        });
+
+
+    m_BasicEffect.SetTextureShadowMap(nullptr);
+    m_BasicEffect.Apply(m_pd3dImmediateContext.Get());
+}
+void GameApp::RenderSkybox()
+{
+    D3D11_VIEWPORT skyboxViewport = m_pCamera->GetViewPort();
+    skyboxViewport.MinDepth = 1.0f;
+    skyboxViewport.MaxDepth = 1.0f;
+    m_pd3dImmediateContext->RSSetViewports(1, &skyboxViewport);
+
+    m_SkyboxEffect.SetRenderDefault();
+    m_SkyboxEffect.SetDepthTexture(m_pDepthTexture->GetShaderResource());
+    m_SkyboxEffect.SetLitTexture(m_pLitTexture->GetShaderResource());
+    
+    // 由于全屏绘制，不需要用到深度缓冲区，也就不需要清空后备缓冲区了
+    ID3D11RenderTargetView* pRTVs[] = { GetBackBufferRTV() };
+    m_pd3dImmediateContext->OMSetRenderTargets(1, pRTVs, nullptr);
+    m_Skybox.Draw(m_pd3dImmediateContext.Get(), m_SkyboxEffect);
+
+    // 解除绑定
+    m_pd3dImmediateContext->OMSetRenderTargets(0, nullptr, nullptr);
+    m_SkyboxEffect.SetDepthTexture(nullptr);
+    m_SkyboxEffect.SetLitTexture(nullptr);
+    m_SkyboxEffect.Apply(m_pd3dImmediateContext.Get());
+}
 
 bool GameApp::InitResource()
 {
     // ******************
-    // 初始化游戏对象
-    //
-
-    // 地面
-    {
-        Model* pModel = m_ModelManager.CreateFromGeometry("Ground", Geometry::CreateGrid(XMFLOAT2(160.0f, 160.0f),
-            XMUINT2(50, 50), XMFLOAT2(10.0f, 10.0f),
-            [](float x, float z) { return 0.3f * (z * sinf(0.1f * x) + x * cosf(0.1f * z)); },	// 高度函数
-            [](float x, float z) { return XMFLOAT3{ -0.03f * z * cosf(0.1f * x) - 0.3f * cosf(0.1f * z), 1.0f,
-            -0.3f * sinf(0.1f * x) + 0.03f * x * sinf(0.1f * z) }; }));
-        pModel->SetDebugObjectName("Ground");
-        m_TextureManager.CreateFromFile("..\\Texture\\grass.dds");
-        pModel->materials[0].Set<std::string>("$Diffuse", "..\\Texture\\grass.dds");
-        pModel->materials[0].Set<XMFLOAT4>("$AmbientColor", XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f));
-        pModel->materials[0].Set<XMFLOAT4>("$DiffuseColor", XMFLOAT4(0.4f, 0.4f, 0.4f, 1.0f));
-        pModel->materials[0].Set<XMFLOAT4>("$SpecularColor", XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
-        pModel->materials[0].Set<float>("$SpecularPower", 16.0f);
-        m_Land.SetModel(pModel);
-        m_Land.GetTransform().SetPosition(0.0f, -1.0f, 0.0f);
-    }
-    // 红色盒子
-    {
-        Model* pModel = m_ModelManager.CreateFromGeometry("RedBox", Geometry::CreateBox(8.0f, 8.0f, 8.0f));
-        pModel->SetDebugObjectName("RedBox");
-        m_TextureManager.CreateFromFile("..\\Texture\\Red.dds");
-        pModel->materials[0].Set<std::string>("$Diffuse", "..\\Texture\\Red.dds");
-        pModel->materials[0].Set<XMFLOAT4>("$AmbientColor", XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f));
-        pModel->materials[0].Set<XMFLOAT4>("$DiffuseColor", XMFLOAT4(0.6f, 0.6f, 0.6f, 1.0f));
-        pModel->materials[0].Set<XMFLOAT4>("$SpecularColor", XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
-        pModel->materials[0].Set<float>("$SpecularPower", 16.0f);
-        pModel->materials[0].Set<float>("$Opacity", 0.5f);
-        m_RedBox.SetModel(pModel);
-        m_RedBox.GetTransform().SetPosition(-6.0f, 2.0f, -4.0f);
-    }
-    // 黄色盒子
-    {
-        Model* pModel = m_ModelManager.CreateFromGeometry("YellowBox", Geometry::CreateBox(8.0f, 8.0f, 8.0f));
-        pModel->SetDebugObjectName("YellowBox");
-        m_TextureManager.CreateFromFile("..\\Texture\\Yellow.dds");
-        pModel->materials[0].Set<std::string>("$Diffuse", "..\\Texture\\Yellow.dds");
-        pModel->materials[0].Set<XMFLOAT4>("$AmbientColor", XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f));
-        pModel->materials[0].Set<XMFLOAT4>("$DiffuseColor", XMFLOAT4(0.6f, 0.6f, 0.6f, 1.0f));
-        pModel->materials[0].Set<XMFLOAT4>("$SpecularColor", XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
-        pModel->materials[0].Set<float>("$SpecularPower", 16.0f);
-        pModel->materials[0].Set<float>("$Opacity", 0.5f);
-        m_YellowBox.SetModel(pModel);
-        m_YellowBox.GetTransform().SetPosition(-2.0f, 1.8f, 0.0f);
-    }
-
-    // ******************
-    // 初始化水面波浪
-    //
-    m_GpuWaves.InitResource(m_pd3dDevice.Get(), 256, 256, 5.0f, 5.0f, 0.03f, 0.625f, 2.0f, 0.2f, 0.05f, 0.1f);
-
-    // ******************
-    // 初始化随机数生成器
-    //
-    m_RandEngine.seed(std::random_device()());
-    m_RowRange = std::uniform_int_distribution<UINT>(5, m_GpuWaves.RowCount() - 5);
-    m_ColRange = std::uniform_int_distribution<UINT>(5, m_GpuWaves.ColumnCount() - 5);
-    m_MagnitudeRange = std::uniform_real_distribution<float>(0.5f, 1.0f);
-
-    // ******************
     // 初始化摄像机
     //
-    auto camera = std::make_shared<ThirdPersonCamera>();
+
+    auto camera = std::make_shared<FirstPersonCamera>();
     m_pCamera = camera;
 
     camera->SetViewPort(0.0f, 0.0f, (float)m_ClientWidth, (float)m_ClientHeight);
-    camera->SetTarget(XMFLOAT3(0.0f, 2.5f, 0.0f));
-    camera->SetDistance(20.0f);
-    camera->SetDistanceMinMax(10.0f, 90.0f);
     camera->SetFrustum(XM_PI / 3, AspectRatio(), 1.0f, 1000.0f);
-    camera->SetRotationX(XM_PIDIV4);
+    camera->LookTo(XMFLOAT3(0.0f, 0.0f, -10.0f), XMFLOAT3(0.0f, 0.0f, 1.0f), XMFLOAT3(0.0f, 1.0f, 0.0f));
+    m_CameraController.InitCamera(m_pCamera.get());
 
+    // ******************
+    // 初始化阴影贴图和特效
+    m_pShadowMapTexture = std::make_unique<Depth2D>(m_pd3dDevice.Get(), 2048, 2048);
+    m_pDebugShadowTexture = std::make_unique<Texture2D>(m_pd3dDevice.Get(), 2048, 2048, DXGI_FORMAT_R8G8B8A8_UNORM);
+
+    m_pShadowMapTexture->SetDebugObjectName("ShadowMapTexture");
+    m_pDebugShadowTexture->SetDebugObjectName("DebugShadowTexture");
+
+    m_BasicEffect.SetDepthBias(0.005f);
     m_BasicEffect.SetViewMatrix(camera->GetViewMatrixXM());
     m_BasicEffect.SetProjMatrix(camera->GetProjMatrixXM());
 
+    m_ShadowEffect.SetProjMatrix(XMMatrixOrthographicLH(40.0f, 40.0f, 20.0f, 60.0f));
+
+    m_SkyboxEffect.SetViewMatrix(camera->GetViewMatrixXM());
+    m_SkyboxEffect.SetProjMatrix(camera->GetProjMatrixXM());
+
     // ******************
-    // 初始化不会变化的值
+    // 初始化对象
     //
+    
+    // 地面
+    {
+        Model* pModel = m_ModelManager.CreateFromGeometry("Ground", Geometry::CreatePlane(XMFLOAT2(20.0f, 30.0f), XMFLOAT2(6.0f, 9.0f)));
+        pModel->SetDebugObjectName("Ground");
+        m_TextureManager.CreateFromFile("..\\Texture\\floor.dds", false, true);
+        pModel->materials[0].Set<std::string>("$Diffuse", "..\\Texture\\floor.dds");
+        m_TextureManager.CreateFromFile("..\\Texture\\floor_nmap.dds");
+        pModel->materials[0].Set<std::string>("$Normal", "..\\Texture\\floor_nmap.dds");
+        pModel->materials[0].Set<XMFLOAT4>("$AmbientColor", XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$DiffuseColor", XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$SpecularColor", XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f));
+        pModel->materials[0].Set<float>("$SpecularPower", 16.0f);
+        m_Ground.SetModel(pModel);
+        m_Ground.GetTransform().SetPosition(0.0f, -3.0f, 0.0f);
+    }
 
-    // 方向光
-    DirectionalLight dirLight[3]{};
-    dirLight[0].ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
-    dirLight[0].diffuse = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-    dirLight[0].specular = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-    dirLight[0].direction = XMFLOAT3(0.577f, -0.577f, 0.577f);
+    // 圆柱
+    {
+        Model* pModel = m_ModelManager.CreateFromGeometry("Cylinder", Geometry::CreateCylinder(0.5f, 3.0f));
+        pModel->SetDebugObjectName("Cylinder");
+        m_TextureManager.CreateFromFile("..\\Texture\\bricks.dds", false, true);
+        pModel->materials[0].Set<std::string>("$Diffuse", "..\\Texture\\bricks.dds");
+        m_TextureManager.CreateFromFile("..\\Texture\\bricks_nmap.dds");
+        pModel->materials[0].Set<std::string>("$Normal", "..\\Texture\\bricks_nmap.dds");
+        pModel->materials[0].Set<XMFLOAT4>("$AmbientColor", XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$DiffuseColor", XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$SpecularColor", XMFLOAT4(0.1f, 0.1f, 0.1f, 1.0f));
+        pModel->materials[0].Set<float>("$SpecularPower", 16.0f);
 
-    dirLight[1].ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-    dirLight[1].diffuse = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
-    dirLight[1].specular = XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
-    dirLight[1].direction = XMFLOAT3(-0.577f, -0.577f, 0.577f);
+        for (size_t i = 0; i < 10; ++i)
+        {
+            m_Cylinders[i].SetModel(pModel);
+            m_Cylinders[i].GetTransform().SetPosition(-6.0f + 12.0f * (i / 5), -1.5f, -10.0f + (i % 5) * 5.0f);
+        }
+    }
 
-    dirLight[2].ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-    dirLight[2].diffuse = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
-    dirLight[2].specular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-    dirLight[2].direction = XMFLOAT3(0.0f, -0.707f, -0.707f);
+    // 石球
+    {
+        Model* pModel = m_ModelManager.CreateFromGeometry("Sphere", Geometry::CreateSphere(0.5f));
+        pModel->SetDebugObjectName("Sphere");
+        m_TextureManager.CreateFromFile("..\\Texture\\stone.dds", false, true);
+        pModel->materials[0].Set<std::string>("$Diffuse", "..\\Texture\\stone.dds");
+        pModel->materials[0].Set<XMFLOAT4>("$AmbientColor", XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$DiffuseColor", XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f));
+        pModel->materials[0].Set<XMFLOAT4>("$SpecularColor", XMFLOAT4(0.1f, 0.1f, 0.1f, 1.0f));
+        pModel->materials[0].Set<float>("$SpecularPower", 16.0f);
+
+        for (size_t i = 0; i < 10; ++i)
+        {
+            m_Spheres[i].SetModel(pModel);
+            m_Spheres[i].GetTransform().SetPosition(-6.0f + 12.0f * (i / 5), 0.5f, -10.0f + (i % 5) * 5.0f);
+        }
+    }
+
+    // 房屋
+    {
+        Model* pModel = m_ModelManager.CreateFromFile("..\\Model\\house.obj");
+        pModel->SetDebugObjectName("House");
+        m_House.SetModel(pModel);
+
+        XMMATRIX S = XMMatrixScaling(0.01f, 0.01f, 0.01f);
+        BoundingBox houseBox = m_House.GetBoundingBox();
+        houseBox.Transform(houseBox, S);
+
+        Transform& houseTransform = m_House.GetTransform();
+        houseTransform.SetScale(0.01f, 0.01f, 0.01f);
+        houseTransform.SetPosition(0.0f, -(houseBox.Center.y - houseBox.Extents.y + 3.0f), 0.0f);
+    }
+    
+    // 天空盒
+    {
+        Model* pModel = m_ModelManager.CreateFromGeometry("Skybox", Geometry::CreateBox());
+        pModel->SetDebugObjectName("Skybox");
+        m_Skybox.SetModel(pModel);
+        m_TextureManager.CreateFromFile("..\\Texture\\desertcube1024.dds", false, true);
+        pModel->materials[0].Set<std::string>("$Skybox", "..\\Texture\\desertcube1024.dds");
+    }
+
+    // ******************
+    // 初始化光照
+    //
+    m_DirLights[0].ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+    m_DirLights[0].diffuse = XMFLOAT4(0.7f, 0.7f, 0.6f, 1.0f);
+    m_DirLights[0].specular = XMFLOAT4(0.8f, 0.8f, 0.7f, 1.0f);
+    m_DirLights[0].direction = XMFLOAT3(5.0f / sqrtf(50.0f), -5.0f / sqrtf(50.0f), 0.0f);
+
+    m_DirLights[1].ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    m_DirLights[1].diffuse = XMFLOAT4(0.40f, 0.40f, 0.40f, 1.0f);
+    m_DirLights[1].specular = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+    m_DirLights[1].direction = XMFLOAT3(0.707f, -0.707f, 0.0f);
+
+    m_DirLights[2].ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+    m_DirLights[2].diffuse = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+    m_DirLights[2].specular = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+    m_DirLights[2].direction = XMFLOAT3(0.0f, 0.0, -1.0f);
+
     for (int i = 0; i < 3; ++i)
-        m_BasicEffect.SetDirLight(i, dirLight[i]);
-
-    // ******************
-    // 初始化雾效和绘制状态
-    //
-
-    m_BasicEffect.SetFogState(true);
-    m_BasicEffect.SetFogColor(XMFLOAT4(0.75f, 0.75f, 0.75f, 1.0f));
-    m_BasicEffect.SetFogStart(15.0f);
-    m_BasicEffect.SetFogRange(135.0f);
-
-    m_PostProcessEffect.SetBlurKernelSize(m_BlurRadius * 2 + 1);
-    m_PostProcessEffect.SetBlurSigma(m_BlurSigma);
+    {
+        m_OriginalLightDirs[i] = m_DirLights[i].direction;
+        m_BasicEffect.SetDirLight(i, m_DirLights[i]);
+    }
 
     return true;
 }

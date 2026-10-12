@@ -4,9 +4,9 @@ cmake_minimum_required (VERSION 3.14)
 # 用户配置
 # ------------------------------------------------------------------------------
 # 设置解决方案名
-project("30_BlurAndSobel")
+project("31_ShadowMapping")
 # 设置项目名(不能有空格) 
-set(TARGET_NAME "30_BlurAndSobel")
+set(TARGET_NAME "31_ShadowMapping")
 # 设置HLSL文件的存放位置
 set(HLSL_DIR "HLSL")
 # Win7系统设置为ON
@@ -14,7 +14,8 @@ set(WIN7_SYSTEM OFF)
 # 如果需要编译期编译着色器，设置为ON
 # 要求着色器命名格式为：ShaderName_ShaderType.hlsl
 # ShaderType为右边任意一种：VS, vs, HS, hs, DS, ds, GS, gs, PS, ps, CS, cs
-set(SHADER_STATIC_COMPILE ON) 
+# 注意：本项目着色器为多入口点(如 BasicVS/BasicPS)运行时编译，命名不满足上述格式，故必须为 OFF
+set(SHADER_STATIC_COMPILE OFF) 
 # 使用ImGui时设置为ON
 # 需要将项目中的ImGui文件夹复制进来，保留*.h/*.cpp/CMakeLists.txt
 set(USE_IMGUI ON)
@@ -66,7 +67,7 @@ source_group("HLSL Files" FILES ${HLSL_FILES})
 source_group("Common" FILES ${COMMON_FILES})
 
 # 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
-set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "30_BlurAndSobel")
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "31_ShadowMapping")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -108,6 +109,10 @@ if (${SHADER_STATIC_COMPILE})
                                     VS_SHADER_DISABLE_OPTIMIZATIONS $<$<CONFIG:Debug>:true>
                                     VS_SHADER_ENABLE_DEBUG $<$<CONFIG:Debug>:true>)
     endforeach()
+else()
+    # 关闭静态编译时，MSVC 仍会因 .hlsl 扩展名默认按 FxCompile 编译，导致 FXC 报错。
+    # 这里按工程给的做法，将着色器标记为仅头文件(不参与构建)，文件仍会显示在 IDE 中。
+    set_source_files_properties(${HLSL_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 endif()
 
 # ImGui 支持

@@ -18,7 +18,6 @@ class BasicEffect : public IEffect, public IEffectTransform,
     public IEffectMaterial, public IEffectMeshData
 {
 public:
-
     BasicEffect();
     virtual ~BasicEffect() override;
 
@@ -51,41 +50,23 @@ public:
 
     MeshDataInput GetInputData(const MeshData& meshData) override;
 
+
     //
     // BasicEffect
     //
 
     // 默认状态来绘制
     void SetRenderDefault();
-    // 透明混合绘制
-    void SetRenderTransparent();
+    // 带法线贴图的绘制
+    void SetRenderWithNormalMap();
 
-    // OIT Pass1
+    // 天空盒
+    void SetTextureCube(ID3D11ShaderResourceView* textureCube);
 
-    // 清空OIT缓冲区
-    void ClearOITBuffers(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11UnorderedAccessView* flBuffer,
-        ID3D11UnorderedAccessView* startOffsetBuffer);
-
-    // 顺序无关透明度存储
-    void SetRenderOITStorage(
-        ID3D11UnorderedAccessView* flBuffer,
-        ID3D11UnorderedAccessView* startOffsetBuffer,
-        uint32_t renderTargetWidth);
-
-    // OIT Pass2
-
-    // 完成OIT渲染
-    void RenderOIT(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* flBuffer,
-        ID3D11ShaderResourceView* startOffsetBuffer,
-        ID3D11ShaderResourceView* input,
-        ID3D11RenderTargetView* output,
-        const D3D11_VIEWPORT& vp);
-
-    void SetTextureDisplacement(ID3D11ShaderResourceView* textureDisplacement);
+    // 阴影
+    void XM_CALLCONV SetShadowTransformMatrix(DirectX::FXMMATRIX S);
+    void SetDepthBias(float bias);
+    void SetTextureShadowMap(ID3D11ShaderResourceView* textureShadowMap);
 
     // 各种类型灯光允许的最大数目
     static const int maxLights = 5;
@@ -96,13 +77,7 @@ public:
 
     void SetEyePos(const DirectX::XMFLOAT3& eyePos);
 
-    void SetFogState(bool isOn);
-    void SetFogStart(float fogStart);
-    void SetFogColor(const DirectX::XMFLOAT4& fogColor);
-    void SetFogRange(float fogRange);
 
-
-    void SetWavesStates(bool enabled, float gridSpatialStep = 0.0f);
 
     // 应用常量缓冲区和纹理资源的变更
     void Apply(ID3D11DeviceContext* deviceContext) override;
@@ -112,66 +87,127 @@ private:
     std::unique_ptr<Impl> pImpl;
 };
 
-class PostProcessEffect
+class ShadowEffect : public IEffect, public IEffectTransform,
+    public IEffectMaterial, public IEffectMeshData
 {
 public:
+    ShadowEffect();
+    virtual ~ShadowEffect() override;
 
-    PostProcessEffect();
-    ~PostProcessEffect();
-
-    PostProcessEffect(PostProcessEffect&& moveFrom) noexcept;
-    PostProcessEffect& operator=(PostProcessEffect&& moveFrom) noexcept;
+    ShadowEffect(ShadowEffect&& moveFrom) noexcept;
+    ShadowEffect& operator=(ShadowEffect&& moveFrom) noexcept;
 
     // 获取单例
-    static PostProcessEffect& Get();
+    static ShadowEffect& Get();
 
     // 初始化所需资源
     bool InitAll(ID3D11Device* device);
 
     //
-    // 将两张图片进行分量相乘
-    // input2为nullptr则直通
+    // IEffectTransform
     //
-    void RenderComposite(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* input1,
-        ID3D11ShaderResourceView* input2,
+
+    void XM_CALLCONV SetWorldMatrix(DirectX::FXMMATRIX W) override;
+    void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V) override;
+    void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P) override;
+
+    //
+    // IEffectMaterial
+    //
+
+    void SetMaterial(const Material& material) override;
+
+    //
+    // IEffectMeshData
+    //
+
+    MeshDataInput GetInputData(const MeshData& meshData) override;
+
+    //
+    // ShadowEffect
+    //
+
+    // 仅写入深度图
+    void SetRenderDepthOnly();
+    // Alpha裁剪绘制(处理具有透明度的物体)
+    void SetRenderAlphaClip();
+
+    // 绘制深度图到纹理
+    void RenderDepthToTexture(ID3D11DeviceContext* deviceContext,
+        ID3D11ShaderResourceView* input,
         ID3D11RenderTargetView* output,
-        const D3D11_VIEWPORT& vp
-    );
+        const D3D11_VIEWPORT& vp);
 
-    //
-    // Sobel滤波
-    //
-    void ComputeSobel(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* input,
-        ID3D11UnorderedAccessView* output,
-        uint32_t width, uint32_t height);
 
-    //
-    // 高斯滤波
-    //
-
-    // size: 奇数, 3-19
-    void SetBlurKernelSize(int size);
-    void SetBlurSigma(float sigma);
-
-    void ComputeGaussianBlurX(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* input,
-        ID3D11UnorderedAccessView* output,
-        uint32_t width, uint32_t height);
-
-    void ComputeGaussianBlurY(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* input,
-        ID3D11UnorderedAccessView* output,
-        uint32_t width, uint32_t height);
+    // 应用常量缓冲区和纹理资源的变更
+    void Apply(ID3D11DeviceContext* deviceContext) override;
 
 private:
     class Impl;
     std::unique_ptr<Impl> pImpl;
 };
 
+
+class SkyboxEffect : public IEffect, public IEffectTransform,
+    public IEffectMaterial, public IEffectMeshData
+{
+public:
+    SkyboxEffect();
+    virtual ~SkyboxEffect() override;
+
+    SkyboxEffect(SkyboxEffect&& moveFrom) noexcept;
+    SkyboxEffect& operator=(SkyboxEffect&& moveFrom) noexcept;
+
+    // 获取单例
+    static SkyboxEffect& Get();
+
+    // 初始化所需资源
+    bool InitAll(ID3D11Device* device);
+
+
+    //
+    // IEffectTransform
+    //
+
+    // 无用
+    void XM_CALLCONV SetWorldMatrix(DirectX::FXMMATRIX W) override;
+
+    void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V) override;
+    void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P) override;
+
+    //
+    // IEffectMaterial
+    //
+
+    void SetMaterial(const Material& material) override;
+
+    //
+    // IEffectMeshData
+    //
+
+    MeshDataInput GetInputData(const MeshData& meshData) override;
+
+    // 
+    // SkyboxEffect
+    //
+
+    // 默认状态来绘制
+    void SetRenderDefault();
+
+    // 设置深度图
+    void SetDepthTexture(ID3D11ShaderResourceView* depthTexture);
+    // 设置场景渲染图
+    void SetLitTexture(ID3D11ShaderResourceView* litTexture);
+
+    //
+    // IEffect
+    //
+
+    // 应用常量缓冲区和纹理资源的变更
+    void Apply(ID3D11DeviceContext* deviceContext) override;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> pImpl;
+};
 #endif
