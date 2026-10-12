@@ -4,9 +4,9 @@ cmake_minimum_required (VERSION 3.14)
 # 用户配置
 # ------------------------------------------------------------------------------
 # 设置解决方案名
-project("33_Tessellation")
+project("34_DisplacementMapping")
 # 设置项目名(不能有空格) 
-set(TARGET_NAME "33_Tessellation")
+set(TARGET_NAME "34_DisplacementMapping")
 # 设置HLSL文件的存放位置
 set(HLSL_DIR "HLSL")
 # Win7系统设置为ON
@@ -15,7 +15,9 @@ set(WIN7_SYSTEM OFF)
 # 要求着色器命名格式为：ShaderName_ShaderType.hlsl
 # ShaderType为右边任意一种：VS, vs, HS, hs, DS, ds, GS, gs, PS, ps, CS, cs
 # 注意：本项目着色器为多入口点(如 BasicVS/BasicPS)运行时编译，命名不满足上述格式，故必须为 OFF
-set(SHADER_STATIC_COMPILE ON) 
+#       ON 时，下面会按"文件名末两位"推测着色器类型，要求一个 .hlsl 只含一个入口点且以 _VS/_PS 等结尾；
+#       而 Basic.hlsl 末两位是 "ic"(取自 Basic 的 i、c)，会被当成非法的 ShaderType 导致 FXC 报错 MSB6011。
+set(SHADER_STATIC_COMPILE OFF) 
 # 使用ImGui时设置为ON
 # 需要将项目中的ImGui文件夹复制进来，保留*.h/*.cpp/CMakeLists.txt
 set(USE_IMGUI ON)
@@ -67,7 +69,7 @@ source_group("HLSL Files" FILES ${HLSL_FILES})
 source_group("Common" FILES ${COMMON_FILES})
 
 # 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
-set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "33_Tessellation")
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "34_DisplacementMapping")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -78,15 +80,23 @@ set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
 
 # 着色器静态编译
 if (${SHADER_STATIC_COMPILE})
+    # 前提：每个 .hlsl 只含一个入口点，且文件名以着色器类型后缀结尾。
+    # 注意：下面这段不读取文件内容，只按"文件名末两位"推测着色器类型，例如：
+    #   Tessellation_VS.hlsl -> 末两位 "VS" -> Vertex   （合法）
+    #   Basic.hlsl           -> 末两位 "ic" -> 非法类型，FXC 直接报错 MSB6011
+    # 因此像 Basic.hlsl 这种多入口点文件（BasicVS/BasicPS/TessDS 等）不能用本模式，必须关闭静态编译。
     foreach(HLSL_FILE ${HLSL_FILES})
         get_filename_component(HLSL_FDIR ${HLSL_FILE} DIRECTORY)
         get_filename_component(HLSL_FBASENAME_WE ${HLSL_FILE} NAME_WE)
         string(CONCAT HLSL_FNAME_WE ${HLSL_FDIR} / ${HLSL_FBASENAME_WE})
         string(LENGTH ${HLSL_FBASENAME_WE} LEN_FNAME_WE)
         math(EXPR LEN_FNAME_WE "${LEN_FNAME_WE}-2")
+        # 取文件名(不含扩展名)的最后两个字符，作为入口点/类型后缀
         string(SUBSTRING ${HLSL_FBASENAME_WE} ${LEN_FNAME_WE} 2 ENTRY_POINT)
         string(TOLOWER ${ENTRY_POINT} SHADER_TYPE)
         
+        # 把后缀映射为 VS_SHADER_TYPE 要求的枚举值；若都不命中，SHADER_TYPE 会保持原字符串(如 "ic")，
+        # 传给 MSBuild 的 FXC 任务即因非法值而报错。
         if ("${SHADER_TYPE}" STREQUAL "vs") 
             set(SHADER_TYPE "Vertex")
         elseif("${SHADER_TYPE}" STREQUAL "hs") 
@@ -112,6 +122,7 @@ if (${SHADER_STATIC_COMPILE})
 else()
     # 关闭静态编译时，MSVC 仍会因 .hlsl 扩展名默认按 FxCompile 编译，导致 FXC 报错。
     # 这里按工程给的做法，将着色器标记为仅头文件(不参与构建)，文件仍会显示在 IDE 中。
+    # 着色器改由程序运行时用 D3DCompile 编译（HLSL 目录已由上面的 file(COPY) 拷贝到输出目录）。
     set_source_files_properties(${HLSL_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 endif()
 
