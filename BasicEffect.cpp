@@ -36,7 +36,8 @@ public:
     ComPtr<ID3D11InputLayout> m_pVertexPosNormalTexLayout;
     ComPtr<ID3D11InputLayout> m_pVertexPosNormalTangentTexLayout;
 
-    bool m_NormalmapEnabled = false;
+    bool m_NormalMapEnabled = false;
+    bool m_AmbientOcclusionMapEnabled = false;
 
     XMFLOAT4X4 m_World{}, m_View{}, m_Proj{};
 };
@@ -48,7 +49,7 @@ public:
 namespace
 {
     // BasicEffect单例
-    static BasicEffect * g_pInstance = nullptr;
+    static BasicEffect* g_pInstance = nullptr;
 }
 
 BasicEffect::BasicEffect()
@@ -63,18 +64,18 @@ BasicEffect::~BasicEffect()
 {
 }
 
-BasicEffect::BasicEffect(BasicEffect && moveFrom) noexcept
+BasicEffect::BasicEffect(BasicEffect&& moveFrom) noexcept
 {
     pImpl.swap(moveFrom.pImpl);
 }
 
-BasicEffect & BasicEffect::operator=(BasicEffect && moveFrom) noexcept
+BasicEffect& BasicEffect::operator=(BasicEffect&& moveFrom) noexcept
 {
     pImpl.swap(moveFrom.pImpl);
     return *this;
 }
 
-BasicEffect & BasicEffect::Get()
+BasicEffect& BasicEffect::Get()
 {
     if (!g_pInstance)
         throw std::exception("BasicEffect needs an instance!");
@@ -82,7 +83,7 @@ BasicEffect & BasicEffect::Get()
 }
 
 
-bool BasicEffect::InitAll(ID3D11Device * device)
+bool BasicEffect::InitAll(ID3D11Device* device)
 {
     if (!device)
         return false;
@@ -95,36 +96,48 @@ bool BasicEffect::InitAll(ID3D11Device * device)
     Microsoft::WRL::ComPtr<ID3DBlob> blob;
 
     D3D_SHADER_MACRO defines[] = {
-        {"USE_NORMAL_MAP", ""},
+        { "USE_NORMAL_MAP", "" },
+        { "USE_SSAO_MAP", "" },
         { nullptr, nullptr}
     };
 
+    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache");
     // ******************
     // 创建顶点着色器
     //
-
-    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache\\");
-    
     HR(pImpl->m_pEffectHelper->CreateShaderFromFile("BasicVS", L"HLSL\\Basic.hlsl",
         device, "BasicVS", "vs_5_0", nullptr, blob.ReleaseAndGetAddressOf()));
     // 创建顶点布局
     HR(device->CreateInputLayout(VertexPosNormalTex::GetInputLayout(), ARRAYSIZE(VertexPosNormalTex::GetInputLayout()),
         blob->GetBufferPointer(), blob->GetBufferSize(), pImpl->m_pVertexPosNormalTexLayout.GetAddressOf()));
 
-    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("NormalMapVS", L"HLSL\\Basic.hlsl",
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("BasicSsaoVS", L"HLSL\\Basic.hlsl",
+        device, "BasicVS", "vs_5_0", defines + 1));
+
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("NormalMapSsaoVS", L"HLSL\\Basic.hlsl",
         device, "BasicVS", "vs_5_0", defines, blob.ReleaseAndGetAddressOf()));
     // 创建顶点布局
     HR(device->CreateInputLayout(VertexPosNormalTangentTex::GetInputLayout(), ARRAYSIZE(VertexPosNormalTangentTex::GetInputLayout()),
         blob->GetBufferPointer(), blob->GetBufferSize(), pImpl->m_pVertexPosNormalTangentTexLayout.GetAddressOf()));
+
+    defines[1] = D3D_SHADER_MACRO{};
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("NormalMapVS", L"HLSL\\Basic.hlsl",
+        device, "BasicVS", "vs_5_0", defines, blob.ReleaseAndGetAddressOf()));
+
+    defines[1] = { "USE_SSAO_MAP", "" };
 
     // ******************
     // 创建像素着色器
     //
     HR(pImpl->m_pEffectHelper->CreateShaderFromFile("BasicPS", L"HLSL\\Basic.hlsl",
         device, "BasicPS", "ps_5_0"));
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("BasicSsaoPS", L"HLSL\\Basic.hlsl",
+        device, "BasicPS", "ps_5_0", defines + 1));
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("NormalMapSsaoPS", L"HLSL\\Basic.hlsl",
+        device, "BasicPS", "ps_5_0", defines));
+    defines[1] = D3D_SHADER_MACRO{};
     HR(pImpl->m_pEffectHelper->CreateShaderFromFile("NormalMapPS", L"HLSL\\Basic.hlsl",
         device, "BasicPS", "ps_5_0", defines));
-
 
     // ******************
     // 创建通道
@@ -136,6 +149,18 @@ bool BasicEffect::InitAll(ID3D11Device * device)
     passDesc.nameVS = "NormalMapVS";
     passDesc.namePS = "NormalMapPS";
     HR(pImpl->m_pEffectHelper->AddEffectPass("NormalMap", device, &passDesc));
+    passDesc.nameVS = "BasicSsaoVS";
+    passDesc.namePS = "BasicSsaoPS";
+    HR(pImpl->m_pEffectHelper->AddEffectPass("BasicSsao", device, &passDesc));
+    passDesc.nameVS = "NormalMapSsaoVS";
+    passDesc.namePS = "NormalMapSsaoPS";
+    HR(pImpl->m_pEffectHelper->AddEffectPass("NormalMapSsao", device, &passDesc));
+
+    // 我们在绘制SSAO法向量/深度图的时候也已经写入了主要的深度/模板贴图，
+    // 所以我们可以直接使用深度值相等的测试，这样可以避免在当前的一趟渲染中
+    // 出现任何的重复写入当前像素的情况，只有距离最近的像素才会通过深度比较测试
+    pImpl->m_pEffectHelper->GetEffectPass("BasicSsao")->SetDepthStencilState(RenderStates::DSSEqual.Get(), 0);
+    pImpl->m_pEffectHelper->GetEffectPass("NormalMapSsao")->SetDepthStencilState(RenderStates::DSSEqual.Get(), 0);
 
     pImpl->m_pEffectHelper->SetSamplerStateByName("g_Sam", RenderStates::SSLinearWrap.Get());
     pImpl->m_pEffectHelper->SetSamplerStateByName("g_SamShadow", RenderStates::SSShadowPCF.Get());
@@ -146,7 +171,7 @@ bool BasicEffect::InitAll(ID3D11Device * device)
     SetDebugObjectName(pImpl->m_pVertexPosNormalTangentTexLayout.Get(), "BasicEffect.VertexPosNormalTangentTexLayout");
 #endif
     pImpl->m_pEffectHelper->SetDebugObjectName("BasicEffect");
-    
+
     return true;
 }
 
@@ -175,10 +200,11 @@ void BasicEffect::SetMaterial(const Material& material)
 
 MeshDataInput BasicEffect::GetInputData(const MeshData& meshData)
 {
+
     MeshDataInput input;
     input.pInputLayout = pImpl->m_pCurrInputLayout.Get();
     input.topology = pImpl->m_CurrTopology;
-    if (pImpl->m_NormalmapEnabled)
+    if (pImpl->m_NormalMapEnabled)
     {
         input.pVertexBuffers = {
             meshData.m_pVertices.Get(),
@@ -210,18 +236,24 @@ MeshDataInput BasicEffect::GetInputData(const MeshData& meshData)
 
 void BasicEffect::SetRenderDefault()
 {
-    pImpl->m_pCurrEffectPass = pImpl->m_pEffectHelper->GetEffectPass("Basic");
+    if (pImpl->m_AmbientOcclusionMapEnabled)
+        pImpl->m_pCurrEffectPass = pImpl->m_pEffectHelper->GetEffectPass("BasicSsao");
+    else
+        pImpl->m_pCurrEffectPass = pImpl->m_pEffectHelper->GetEffectPass("Basic");
     pImpl->m_pCurrInputLayout = pImpl->m_pVertexPosNormalTexLayout;
     pImpl->m_CurrTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-    pImpl->m_NormalmapEnabled = false;
+    pImpl->m_NormalMapEnabled = false;
 }
 
 void BasicEffect::SetRenderWithNormalMap()
 {
-    pImpl->m_pCurrEffectPass = pImpl->m_pEffectHelper->GetEffectPass("NormalMap");
+    if (pImpl->m_AmbientOcclusionMapEnabled)
+        pImpl->m_pCurrEffectPass = pImpl->m_pEffectHelper->GetEffectPass("NormalMapSsao");
+    else
+        pImpl->m_pCurrEffectPass = pImpl->m_pEffectHelper->GetEffectPass("NormalMap");
     pImpl->m_pCurrInputLayout = pImpl->m_pVertexPosNormalTangentTexLayout;
     pImpl->m_CurrTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-    pImpl->m_NormalmapEnabled = true;
+    pImpl->m_NormalMapEnabled = true;
 }
 
 void XM_CALLCONV BasicEffect::SetWorldMatrix(DirectX::FXMMATRIX W)
@@ -245,19 +277,24 @@ void XM_CALLCONV BasicEffect::SetShadowTransformMatrix(DirectX::FXMMATRIX S)
     pImpl->m_pEffectHelper->GetConstantBufferVariable("g_ShadowTransform")->SetFloatMatrix(4, 4, (const float*)&shadowTransform);
 }
 
-void BasicEffect::SetDirLight(uint32_t pos, const DirectionalLight & dirLight)
+void BasicEffect::SetDirLight(uint32_t pos, const DirectionalLight& dirLight)
 {
     pImpl->m_pEffectHelper->GetConstantBufferVariable("g_DirLight")->SetRaw(&dirLight, pos * sizeof(dirLight), sizeof(dirLight));
 }
 
-void BasicEffect::SetPointLight(uint32_t pos, const PointLight & pointLight)
+void BasicEffect::SetPointLight(uint32_t pos, const PointLight& pointLight)
 {
     pImpl->m_pEffectHelper->GetConstantBufferVariable("g_PointLight")->SetRaw(&pointLight, pos * sizeof(pointLight), sizeof(pointLight));
 }
 
-void BasicEffect::SetSpotLight(uint32_t pos, const SpotLight & spotLight)
+void BasicEffect::SetSpotLight(uint32_t pos, const SpotLight& spotLight)
 {
     pImpl->m_pEffectHelper->GetConstantBufferVariable("g_SpotLight")->SetRaw(&spotLight, pos * sizeof(spotLight), sizeof(spotLight));
+}
+
+void BasicEffect::SetShadowEnabled(bool enabled)
+{
+    pImpl->m_pEffectHelper->GetConstantBufferVariable("g_EnableShadow")->SetSInt(enabled);
 }
 
 void BasicEffect::SetDepthBias(float bias)
@@ -270,6 +307,16 @@ void BasicEffect::SetTextureShadowMap(ID3D11ShaderResourceView* textureShadowMap
     pImpl->m_pEffectHelper->SetShaderResourceByName("g_ShadowMap", textureShadowMap);
 }
 
+void BasicEffect::SetSSAOEnabled(bool enabled)
+{
+    pImpl->m_AmbientOcclusionMapEnabled = enabled;
+}
+
+void BasicEffect::SetTextureAmbientOcclusion(ID3D11ShaderResourceView* textureAmbientOcclusion)
+{
+    pImpl->m_pEffectHelper->SetShaderResourceByName("g_AmbientOcclusionMap", textureAmbientOcclusion);
+}
+
 void BasicEffect::SetTextureCube(ID3D11ShaderResourceView* textureCube)
 {
     pImpl->m_pEffectHelper->SetShaderResourceByName("g_TexCube", textureCube);
@@ -280,7 +327,7 @@ void BasicEffect::SetEyePos(const DirectX::XMFLOAT3& eyePos)
     pImpl->m_pEffectHelper->GetConstantBufferVariable("g_EyePosW")->SetFloatVector(3, (FLOAT*)&eyePos);
 }
 
-void BasicEffect::Apply(ID3D11DeviceContext * deviceContext)
+void BasicEffect::Apply(ID3D11DeviceContext* deviceContext)
 {
     XMMATRIX W = XMLoadFloat4x4(&pImpl->m_World);
     XMMATRIX V = XMLoadFloat4x4(&pImpl->m_View);
@@ -288,15 +335,19 @@ void BasicEffect::Apply(ID3D11DeviceContext * deviceContext)
 
     XMMATRIX VP = V * P;
     XMMATRIX WInvT = XMath::InverseTranspose(W);
+    XMMATRIX WVP = W * V * P;
 
+    WVP = XMMatrixTranspose(WVP);
     VP = XMMatrixTranspose(VP);
     WInvT = XMMatrixTranspose(WInvT);
     W = XMMatrixTranspose(W);
+    
+    
 
     pImpl->m_pEffectHelper->GetConstantBufferVariable("g_World")->SetFloatMatrix(4, 4, (FLOAT*)&W);
     pImpl->m_pEffectHelper->GetConstantBufferVariable("g_WorldInvTranspose")->SetFloatMatrix(4, 4, (FLOAT*)&WInvT);
     pImpl->m_pEffectHelper->GetConstantBufferVariable("g_ViewProj")->SetFloatMatrix(4, 4, (FLOAT*)&VP);
-
+    pImpl->m_pEffectHelper->GetConstantBufferVariable("g_WorldViewProj")->SetFloatMatrix(4, 4, (FLOAT*)&WVP);
     if (pImpl->m_pCurrEffectPass)
         pImpl->m_pCurrEffectPass->Apply(deviceContext);
 }

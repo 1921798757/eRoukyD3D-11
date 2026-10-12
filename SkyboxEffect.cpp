@@ -31,7 +31,7 @@ public:
     using ComPtr = Microsoft::WRL::ComPtr<T>;
 
     std::unique_ptr<EffectHelper> m_pEffectHelper;
-    
+
     std::shared_ptr<IEffectPass> m_pCurrEffectPass;
     ComPtr<ID3D11InputLayout> m_pCurrInputLayout;
     D3D11_PRIMITIVE_TOPOLOGY m_CurrTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -93,7 +93,7 @@ bool SkyboxEffect::InitAll(ID3D11Device* device)
 
     Microsoft::WRL::ComPtr<ID3DBlob> blob;
 
-    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache\\");
+    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache");
 
     // ******************
     // 创建顶点着色器

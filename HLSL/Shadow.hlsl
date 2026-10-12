@@ -45,7 +45,7 @@ void ShadowPS(VertexPosHTex pIn, uniform float clipValue)
     clip(diffuse.a - clipValue);
 }
 
-float4 DebugPS(VertexPosHTex pIn) : SV_Target
+float4 DebugShadowPS(VertexPosHTex pIn) : SV_Target
 {
     float depth = g_DiffuseMap.Sample(g_Sam, pIn.texCoord).r;
     return float4(depth.rrr, 1.0f);

@@ -89,14 +89,12 @@ bool ShadowEffect::InitAll(ID3D11Device* device)
 
     Microsoft::WRL::ComPtr<ID3DBlob> blob;
 
-    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache\\");
-
+    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache");
     // ******************
     // 创建顶点着色器
     //
 
-    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("ShadowVS", L"HLSL\\Shadow.hlsl",
-        device, "ShadowVS", "vs_5_0", nullptr, blob.ReleaseAndGetAddressOf()));
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("ShadowVS", L"HLSL\\Shadow.hlsl", device, "ShadowVS", "vs_5_0", nullptr, blob.ReleaseAndGetAddressOf()));
     // 创建顶点布局
     HR(device->CreateInputLayout(VertexPosNormalTex::GetInputLayout(), ARRAYSIZE(VertexPosNormalTex::GetInputLayout()),
         blob->GetBufferPointer(), blob->GetBufferSize(), pImpl->m_pVertexPosNormalTexLayout.GetAddressOf()));
@@ -107,10 +105,8 @@ bool ShadowEffect::InitAll(ID3D11Device* device)
     // ******************
     // 创建像素着色器
     //
-    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("ShadowPS", L"HLSL\\Shadow.hlsl",
-        device, "ShadowPS", "ps_5_0"));
-    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("DebugPS", L"HLSL\\Shadow.hlsl",
-        device, "DebugPS", "ps_5_0"));
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("ShadowPS", L"HLSL\\Shadow.hlsl", device, "ShadowPS", "ps_5_0"));
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("DebugShadowPS", L"HLSL\\Shadow.hlsl", device, "DebugShadowPS", "ps_5_0"));
 
     // ******************
     // 创建通道
@@ -125,8 +121,8 @@ bool ShadowEffect::InitAll(ID3D11Device* device)
     pImpl->m_pEffectHelper->GetEffectPass("DepthAlphaClip")->SetRasterizerState(RenderStates::RSShadow.Get());
 
     passDesc.nameVS = "FullScreenTriangleTexcoordVS";
-    passDesc.namePS = "DebugPS";
-    HR(pImpl->m_pEffectHelper->AddEffectPass("Debug", device, &passDesc));
+    passDesc.namePS = "DebugShadowPS";
+    HR(pImpl->m_pEffectHelper->AddEffectPass("DebugShadow", device, &passDesc));
 
     pImpl->m_pEffectHelper->SetSamplerStateByName("g_Sam", RenderStates::SSLinearWrap.Get());
 
@@ -161,7 +157,7 @@ void ShadowEffect::RenderDepthToTexture(
 {
     deviceContext->IASetInputLayout(nullptr);
     deviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    pImpl->m_pCurrEffectPass = pImpl->m_pEffectHelper->GetEffectPass("Debug");
+    pImpl->m_pCurrEffectPass = pImpl->m_pEffectHelper->GetEffectPass("DebugShadow");
     pImpl->m_pEffectHelper->SetShaderResourceByName("g_DiffuseMap", input);
     pImpl->m_pCurrEffectPass->Apply(deviceContext);
     deviceContext->OMSetRenderTargets(1, &output, nullptr);

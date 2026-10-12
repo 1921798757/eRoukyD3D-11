@@ -6,6 +6,7 @@
 Texture2D g_DiffuseMap : register(t0);
 Texture2D g_NormalMap : register(t1);
 Texture2D g_ShadowMap : register(t2);
+Texture2D g_AmbientOcclusionMap : register(t3);
 SamplerState g_Sam : register(s0);
 SamplerComparisonState g_SamShadow : register(s1);
 
@@ -13,6 +14,7 @@ cbuffer CBChangesEveryInstanceDrawing : register(b0)
 {
     matrix g_World;
     matrix g_WorldInvTranspose;
+    matrix g_WorldViewProj;
 }
 
 cbuffer CBChangesEveryObjectDrawing : register(b1)
@@ -20,17 +22,18 @@ cbuffer CBChangesEveryObjectDrawing : register(b1)
     Material g_Material;
 }
 
-cbuffer CBChangesEveryFrame : register(b2)
+cbuffer CBDrawingStates : register(b2)
+{
+    float g_DepthBias;
+    float g_Pad;
+}
+
+cbuffer CBChangesEveryFrame : register(b3)
 {
     matrix g_ViewProj;
     matrix g_ShadowTransform; // ShadowView * ShadowProj * T
     float3 g_EyePosW;
     float g_Pad2;
-}
-
-cbuffer CBDrawingStates : register(b3)
-{
-    float g_DepthBias;
 }
 
 cbuffer CBChangesRarely : register(b4)
@@ -60,6 +63,9 @@ struct VertexOutput
 #endif 
     float2 tex : TEXCOORD0;
     float4 ShadowPosH : TEXCOORD1;
+#if defined USE_SSAO_MAP
+    float4 SSAOPosH : TEXCOORD2;
+#endif
 };
 
 // 顶点着色器
@@ -70,13 +76,22 @@ VertexOutput BasicVS(VertexInput vIn)
     vector posW = mul(float4(vIn.posL, 1.0f), g_World);
     
     vOut.posW = posW.xyz;
-    vOut.posH = mul(posW, g_ViewProj);
+    vOut.posH = mul(float4(vIn.posL, 1.0f), g_WorldViewProj); // 保持和SSAO的计算一致
     vOut.normalW = mul(vIn.normalL, (float3x3) g_WorldInvTranspose);
 #if defined USE_NORMAL_MAP
-    vOut.tangentW = mul(vIn.tangentL, g_World);
+    vOut.tangentW = float4(mul(vIn.tangentL.xyz, (float3x3) g_World), vIn.tangentL.w);
 #endif 
     vOut.tex = vIn.tex;
     vOut.ShadowPosH = mul(posW, g_ShadowTransform);
+#if defined USE_SSAO_MAP
+    // 从NDC坐标[-1, 1]^2变换到纹理空间坐标[0, 1]^2
+    // u = 0.5x + 0.5
+    // v = -0.5y + 0.5
+    // ((xw, yw, zw, w) + (w, -w, 0, 0)) * (0.5, -0.5, 1, 1) = ((0.5x + 0.5)w, (-0.5y + 0.5)w, zw, w)
+    //                                                      = (uw, vw, zw, w)
+    //                                                      =>  (u, v, z, 1)
+    vOut.SSAOPosH = (vOut.posH + float4(vOut.posH.w, -vOut.posH.w, 0.0f, 0.0f)) * float4(0.5f, -0.5f, 1.0f, 1.0f);
+#endif
     return vOut;
 }
 
@@ -102,6 +117,13 @@ float4 BasicPS(VertexOutput pIn) : SV_Target
     pIn.normalW = NormalSampleToWorldSpace(normalMapSample, pIn.normalW, pIn.tangentW);
 #endif
     
+        // 完成纹理投影变换并对SSAO图采样
+    float ambientAccess = 1.0f;
+#if defined USE_SSAO_MAP
+    pIn.SSAOPosH /= pIn.SSAOPosH.w;
+    ambientAccess = g_AmbientOcclusionMap.SampleLevel(g_Sam, pIn.SSAOPosH.xy, 0.0f).r;
+#endif
+    
     // 初始化为0 
     float4 ambient = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float4 diffuse = float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -119,7 +141,7 @@ float4 BasicPS(VertexOutput pIn) : SV_Target
     for (i = 0; i < 5; ++i)
     {
         ComputeDirectionalLight(g_Material, g_DirLight[i], pIn.normalW, toEyeW, A, D, S);
-        ambient += A;
+        ambient += ambientAccess * A;
         diffuse += shadow[i] * D;
         spec += shadow[i] * S;
     }
@@ -146,5 +168,6 @@ float4 BasicPS(VertexOutput pIn) : SV_Target
     litColor.a = texColor.a * g_Material.diffuse.a;
     return litColor;
 }
+
 
 #endif
