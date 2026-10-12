@@ -9,16 +9,28 @@
 #ifndef EFFECTS_H
 #define EFFECTS_H
 
+#include <memory>
+#include <LightHelper.h>
+#include <RenderStates.h>
+
+#include <GameObject.h>
+
+#include <Buffer.h>
 #include <IEffect.h>
 #include <Material.h>
 #include <MeshData.h>
 #include <LightHelper.h>
 
-enum class RasterizerMode { Solid, Wireframe };
-
 class BasicEffect : public IEffect, public IEffectTransform,
     public IEffectMaterial, public IEffectMeshData
 {
+public:
+    struct InstancedData
+    {
+        DirectX::XMFLOAT4X4 world;
+        DirectX::XMFLOAT4X4 worldInvTranspose;
+    };
+
 public:
     BasicEffect();
     virtual ~BasicEffect() override;
@@ -40,6 +52,7 @@ public:
     void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V) override;
     void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P) override;
 
+
     //
     // IEffectMaterial
     //
@@ -52,40 +65,15 @@ public:
 
     MeshDataInput GetInputData(const MeshData& meshData) override;
 
-
     //
     // BasicEffect
     //
 
     // 默认状态来绘制
     void SetRenderDefault();
-    // 带法线贴图的绘制
-    void SetRenderWithNormalMap();
-    // 带法线/位移贴图的绘制
-    void SetRenderWithDisplacementMap();
 
-    // 给当前Pass设置光栅化模式
-    void SetRasterizerMode(RasterizerMode mode);
-
-    // 天空盒
-    void SetTextureCube(ID3D11ShaderResourceView* textureCube);
-
-    // 阴影
-
-    void XM_CALLCONV SetShadowTransformMatrix(DirectX::FXMMATRIX S);
-    void SetDepthBias(float bias);
-    void SetTextureShadowMap(ID3D11ShaderResourceView* textureShadowMap);
-
-    // SSAO
-    void SetSSAOEnabled(bool enabled);
-    void SetTextureAmbientOcclusion(ID3D11ShaderResourceView* textureAmbientOcclusion);
-
-    // 曲面细分
-
-    // 设置位移幅度
-    void SetHeightScale(float scale);
-    // 设置曲面细分信息
-    void SetTessInfo(float maxTessDistance, float minTessDistance, float minTessFactor, float maxTessFactor);
+    // 绘制实例
+    void DrawInstanced(ID3D11DeviceContext* deviceContext, Buffer& instancedBuffer, const GameObject& object, uint32_t numObjects);
 
     // 各种类型灯光允许的最大数目
     static const int maxLights = 5;
@@ -96,76 +84,10 @@ public:
 
     void SetEyePos(const DirectX::XMFLOAT3& eyePos);
 
-
-
-    // 应用常量缓冲区和纹理资源的变更
-    void Apply(ID3D11DeviceContext* deviceContext) override;
-
-private:
-    class Impl;
-    std::unique_ptr<Impl> pImpl;
-};
-
-class ShadowEffect : public IEffect, public IEffectTransform,
-    public IEffectMaterial, public IEffectMeshData
-{
-public:
-    ShadowEffect();
-    virtual ~ShadowEffect() override;
-
-    ShadowEffect(ShadowEffect&& moveFrom) noexcept;
-    ShadowEffect& operator=(ShadowEffect&& moveFrom) noexcept;
-
-    // 获取单例
-    static ShadowEffect& Get();
-
-    // 初始化所需资源
-    bool InitAll(ID3D11Device* device);
-
-    //
-    // IEffectTransform
-    //
-
-    void XM_CALLCONV SetWorldMatrix(DirectX::FXMMATRIX W) override;
-    void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V) override;
-    void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P) override;
-
-    //
-    // IEffectMaterial
-    //
-
-    void SetMaterial(const Material& material) override;
-
-    //
-    // IEffectMeshData
-    //
-
-    MeshDataInput GetInputData(const MeshData& meshData) override;
-
-    //
-    // ShadowEffect
-    //
-
-    // 仅写入深度图
-    void SetRenderDepthOnly(bool enableAlphaClip = false);
-    // 顶点带位移，仅写入深度图
-    void SetRenderDepthOnlyWithDisplacement(bool enableAlphaClip = false);
-
-    // 曲面细分
-
-    // 设置摄像机位置
-    void SetEyePos(const DirectX::XMFLOAT3& eyePos);
-    // 设置位移幅度
-    void SetHeightScale(float scale);
-    // 设置曲面细分信息
-    void SetTessInfo(float maxTessDistance, float minTessDistance, float minTessFactor, float maxTessFactor);
-
-    // 绘制深度图到纹理
-    void RenderDepthToTexture(ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* input,
-        ID3D11RenderTargetView* output,
-        const D3D11_VIEWPORT& vp);
-
+    void SetFogState(bool isOn);
+    void SetFogStart(float fogStart);
+    void SetFogColor(const DirectX::XMFLOAT4& fogColor);
+    void SetFogRange(float fogRange);
 
     // 应用常量缓冲区和纹理资源的变更
     void Apply(ID3D11DeviceContext* deviceContext) override;
@@ -174,7 +96,6 @@ private:
     class Impl;
     std::unique_ptr<Impl> pImpl;
 };
-
 
 class SkyboxEffect : public IEffect, public IEffectTransform,
     public IEffectMaterial, public IEffectMeshData
@@ -239,116 +160,68 @@ private:
     std::unique_ptr<Impl> pImpl;
 };
 
-class SSAOEffect : public IEffect, public IEffectTransform,
-    public IEffectMaterial, public IEffectMeshData
+class ParticleEffect : public IEffect
 {
 public:
+    struct VertexParticle
+    {
+        DirectX::XMFLOAT3 initialPos;
+        DirectX::XMFLOAT3 initialVel;
+        DirectX::XMFLOAT2 size;
+        float age;
+        uint32_t type;
+    };
 
-    SSAOEffect();
-    virtual ~SSAOEffect() override;
+    struct InputData
+    {
+        ID3D11InputLayout* pInputLayout;
+        D3D11_PRIMITIVE_TOPOLOGY topology;
+        uint32_t stride;
+        uint32_t offset;
+    };
 
-    SSAOEffect(SSAOEffect&& moveFrom) noexcept;
-    SSAOEffect& operator=(SSAOEffect&& moveFrom) noexcept;
+public:
+    ParticleEffect();
+    virtual ~ParticleEffect() override;
 
-    // 获取单例
-    static SSAOEffect& Get();
+    ParticleEffect(ParticleEffect&& moveFrom) noexcept;
+    ParticleEffect& operator=(ParticleEffect&& moveFrom) noexcept;
 
-    // 初始化所需资源
-    bool InitAll(ID3D11Device* device);
+    bool InitAll(ID3D11Device* device, std::wstring_view filename);
 
-    //
-    // IEffectTransform
-    //
+    // vertexCount为0时调用drawAuto
+    void RenderToVertexBuffer(
+        ID3D11DeviceContext* deviceContext,
+        ID3D11Buffer* input,
+        ID3D11Buffer* output,
+        uint32_t vertexCount = 0);  
+    // 绘制粒子系统
+    InputData SetRenderDefault();
 
-    void XM_CALLCONV SetWorldMatrix(DirectX::FXMMATRIX W) override;
-    void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V) override;
-    void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P) override;
+    void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V);
+    void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P);
 
-    //
-    // IEffectMaterial
-    //
+    void SetEyePos(const DirectX::XMFLOAT3& eyePos);
 
-    void SetMaterial(const Material& material) override;
+    void SetGameTime(float t);
+    void SetTimeStep(float step);
 
-    //
-    // IEffectMeshData
-    //
+    void SetEmitDir(const DirectX::XMFLOAT3& dir);
+    void SetEmitPos(const DirectX::XMFLOAT3& pos);
 
-    MeshDataInput GetInputData(const MeshData& meshData) override;
+    void SetEmitInterval(float t);
+    void SetAliveTime(float t);
+
+    void SetAcceleration(const DirectX::XMFLOAT3& accel);
+
+    void SetTextureInput(ID3D11ShaderResourceView* textureInput);
+    void SetTextureRandom(ID3D11ShaderResourceView* textureRandom);
+
+    void SetRasterizerState(ID3D11RasterizerState* rasterizerState);
+    void SetBlendState(ID3D11BlendState* blendState, const float blendFactor[4], uint32_t sampleMask);
+    void SetDepthStencilState(ID3D11DepthStencilState* depthStencilState, UINT stencilRef);
 
     // 
-    // SSAOEffect
-    //
-
-    // Pass1: 绘制观察空间法向量和深度贴图
-
-    void SetRenderNormalDepthMap(bool enableAlphaClip = false);
-    // 使用位移贴图
-    void SetRenderNormalDepthMapWithDisplacement(bool enableAlphaClip = false);
-
-    // 给当前Pass设置光栅化模式
-    void SetRasterizerMode(RasterizerMode mode);
-
-    // 曲面细分
-
-    // 设置摄像机位置
-    void SetEyePos(const DirectX::XMFLOAT3& eyePos);
-    // 设置位移幅度
-    void SetHeightScale(float scale);
-    // 设置曲面细分信息
-    void SetTessInfo(float maxTessDistance, float minTessDistance, float minTessFactor, float maxTessFactor);
-
-
-    // Pass2: 绘制SSAO图
-
-    // 设置随机向量纹理
-    void SetTextureRandomVec(ID3D11ShaderResourceView* textureRandomVec);
-    // 设置遮蔽信息
-    void SetOcclusionInfo(float radius, float fadeStart, float fadeEnd, float surfaceEpsilon);
-    // 设置视锥体远平面信息
-    void SetFrustumFarPlanePoints(const DirectX::XMFLOAT4 farPlanePoints[3]);
-    // 设置偏移向量
-    void SetOffsetVectors(const DirectX::XMFLOAT4 offsetVectors[14]);
-
-    void RenderToSSAOTexture(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* normalDepth,
-        ID3D11RenderTargetView* output,
-        const D3D11_VIEWPORT& vp,
-        uint32_t sampleCount);
-
-
-    // Pass3: 对SSAO图进行双边滤波
-
-    // 设置模糊权值
-    void SetBlurWeights(const float weights[11]);
-    // 设置模糊半径
-    void SetBlurRadius(int radius);
-
-    // 进行水平双边滤波，要求输入输出图像大小相同
-    void BilateralBlurX(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* input,
-        ID3D11ShaderResourceView* normalDepth,
-        ID3D11RenderTargetView* output,
-        const D3D11_VIEWPORT& vp);
-
-    // 进行竖直双边滤波，要求输入输出图像大小相同
-    void BilateralBlurY(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* input,
-        ID3D11ShaderResourceView* normalDepth,
-        ID3D11RenderTargetView* output,
-        const D3D11_VIEWPORT& vp);
-
-
-    // 绘制AO图到纹理
-    void RenderAmbientOcclusionToTexture(ID3D11DeviceContext* deviceContext,
-        ID3D11ShaderResourceView* input,
-        ID3D11RenderTargetView* output,
-        const D3D11_VIEWPORT& vp);
-
-    //
     // IEffect
     //
 

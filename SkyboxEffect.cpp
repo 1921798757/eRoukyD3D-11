@@ -93,7 +93,7 @@ bool SkyboxEffect::InitAll(ID3D11Device* device)
 
     Microsoft::WRL::ComPtr<ID3DBlob> blob;
 
-    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache");
+    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache\\");
 
     // ******************
     // 创建顶点着色器
