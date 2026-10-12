@@ -1,22 +1,16 @@
 #ifndef GAMEAPP_H
 #define GAMEAPP_H
 
-#include <random>
 #include <WinMin.h>
-#include "d3dApp.h"
-#include "Effects.h"
-#include <CameraController.h>
-#include <RenderStates.h>
-#include <GameObject.h>
-#include <Texture2D.h>
-#include <Buffer.h>
-#include <Collision.h>
-#include <ModelManager.h>
-#include <TextureManager.h>
-#include "SSAOManager.h"
+#include <d3dApp.h>
+#include <EffectHelper.h>
+#include <sstream>
 
 class GameApp : public D3DApp
 {
+public:
+    enum class TessellationMode { Triangle, Quad, BezierCurve, BezierSurface };
+    enum class PartitionMode { Integer, Odd, Even };
 public:
     GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWidth, int initHeight);
     ~GameApp();
@@ -26,72 +20,46 @@ public:
     void UpdateScene(float dt);
     void DrawScene();
 
-    void RenderSSAO();
-    void RenderShadow();
-    void RenderForward();
-    void RenderSkybox();
+    void UpdateTriangle();
+    void UpdateQuad();
+    void UpdateBezierCurve();
+    void UpdateBezierSurface();
 
-    template<class Effect>
-    void DrawScene(Effect& effect, std::function<void(Effect&, ID3D11DeviceContext*)> func = [](Effect&, ID3D11DeviceContext*) {})
-    {
-        // 这些物体有法线贴图
-        {
-            // 地面       
-            m_Ground.Draw(m_pd3dImmediateContext.Get(), effect);
-
-            // 石柱
-            for (auto& cylinder : m_Cylinders)
-                cylinder.Draw(m_pd3dImmediateContext.Get(), effect);
-        }
-
-        // 没有法线贴图的物体调用普通绘制
-        func(effect, m_pd3dImmediateContext.Get());
-        // 石球
-        for (auto& sphere : m_Spheres)
-            sphere.Draw(m_pd3dImmediateContext.Get(), effect);
-
-        // 房屋
-        m_House.Draw(m_pd3dImmediateContext.Get(), effect);
-    }
+    void DrawTriangle();
+    void DrawQuad();
+    void DrawBezierCurve();
+    void DrawBezierSurface();
 
 private:
     bool InitResource();
 
 private:
+    
+    TessellationMode m_TessellationMode = TessellationMode::Triangle;	// 镶嵌模式
+    PartitionMode m_PartitionMode = PartitionMode::Integer;				// 细分模式
 
-    TextureManager m_TextureManager;
-    ModelManager m_ModelManager;
+    int m_ChosenBezPoint = -1;											// 被选中的控制点
+    ComPtr<ID3D11Buffer> m_pBezCurveVB;									// 贝塞尔曲线缓冲区
+    DirectX::XMFLOAT3 m_BezPoints[10] = {};								// 贝塞尔控制点
+    float m_IsolineEdgeTess[2] = { 1.0f, 64.0f };						// 未知参数和段数
 
-    bool m_EnableSSAO = true;									// 开启SSAO
-    bool m_UpdateLight = true;                                  // 更新灯光
-    bool m_EnableNormalMap = true;								// 开启法线贴图
-    bool m_EnableDebug = true;									// 开启调试模式
+    ComPtr<ID3D11Buffer> m_pTriangleVB;									// 三角形顶点缓冲区
+    float m_TriEdgeTess[3] = { 4.0f, 4.0f, 4.0f };						// 三角形各边的细分因子
+    float m_TriInsideTess = 4.0f;										// 三角形内部的细分因子
 
-    GameObject m_Ground;										// 地面
-    GameObject m_Cylinders[10];								    // 圆柱体
-    GameObject m_Spheres[10];									// 球体
-    GameObject m_House;											// 房屋
-    GameObject m_Skybox;                                        // 天空盒
+    ComPtr<ID3D11Buffer> m_pQuadVB;										// 四边形顶点缓冲区
+    float m_QuadEdgeTess[4] = { 4.0f, 4.0f, 4.0f, 4.0f };				// 四边形各边的细分因子
+    float m_QuadInsideTess[2] = { 4.0f, 4.0f };							// 四边形内部的细分因子
 
-    std::unique_ptr<Depth2D> m_pDepthTexture;                   // 深度纹理
-    std::unique_ptr<Texture2D> m_pLitTexture;                   // 场景渲染缓冲区
-    std::unique_ptr<Depth2D> m_pShadowMapTexture;               // 阴影贴图
-    std::unique_ptr<Texture2D> m_pDebugAOTexture;               // 调试用环境光遮蔽纹理
+    ComPtr<ID3D11Buffer> m_pBezSurfaceVB;								// 贝塞尔曲面缓冲区
+    float m_QuadPatchEdgeTess[4] = { 25.0f, 25.0f, 25.0f, 25.0f };		// 贝塞尔曲面各边的细分因子
+    float m_QuadPatchInsideTess[2] = { 25.0f, 25.0f };					// 贝塞尔曲面内部的细分因子
+    float m_Phi = 3.14159f / 4, m_Theta = 0.0f, m_Radius = 30.0f;		// 第三人称视角摄像机参数
 
-    SSAOManager m_SSAOManager;                                  // SSAO管理类
+    ComPtr<ID3D11InputLayout> m_pInputLayout;							// 顶点输入布局
+    ComPtr<ID3D11RasterizerState> m_pRSWireFrame;						// 线框光栅化
 
-    DirectionalLight m_DirLights[3] = {};						// 方向光
-    DirectX::XMFLOAT3 m_OriginalLightDirs[3] = {};				// 初始光方向
-
-    BasicEffect m_BasicEffect;				                    // 基础特效
-    ShadowEffect m_ShadowEffect;				                // 阴影特效
-    SkyboxEffect m_SkyboxEffect;					            // 天空盒特效
-    SSAOEffect m_SSAOEffect;                                    // SSAO特效
-
-    std::shared_ptr<FirstPersonCamera> m_pCamera;	            // 摄像机
-    FirstPersonCameraController m_CameraController;             // 摄像机控制器
-
-
+    std::unique_ptr<EffectHelper> m_pEffectHelper;						// 特效助理
 };
 
 

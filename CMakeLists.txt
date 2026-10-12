@@ -4,9 +4,9 @@ cmake_minimum_required (VERSION 3.14)
 # 用户配置
 # ------------------------------------------------------------------------------
 # 设置解决方案名
-project("32_SSAO")
+project("33_Tessellation")
 # 设置项目名(不能有空格) 
-set(TARGET_NAME "32_SSAO")
+set(TARGET_NAME "33_Tessellation")
 # 设置HLSL文件的存放位置
 set(HLSL_DIR "HLSL")
 # Win7系统设置为ON
@@ -15,7 +15,7 @@ set(WIN7_SYSTEM OFF)
 # 要求着色器命名格式为：ShaderName_ShaderType.hlsl
 # ShaderType为右边任意一种：VS, vs, HS, hs, DS, ds, GS, gs, PS, ps, CS, cs
 # 注意：本项目着色器为多入口点(如 BasicVS/BasicPS)运行时编译，命名不满足上述格式，故必须为 OFF
-set(SHADER_STATIC_COMPILE OFF) 
+set(SHADER_STATIC_COMPILE ON) 
 # 使用ImGui时设置为ON
 # 需要将项目中的ImGui文件夹复制进来，保留*.h/*.cpp/CMakeLists.txt
 set(USE_IMGUI ON)
@@ -67,7 +67,7 @@ source_group("HLSL Files" FILES ${HLSL_FILES})
 source_group("Common" FILES ${COMMON_FILES})
 
 # 设置目标属性：输出文件名及输出路径 (已融合：指定的带空格名字以及 FOLDER 分组)
-set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "32_SSAO")
+set_target_properties(${TARGET_NAME} PROPERTIES OUTPUT_NAME "33_Tessellation")
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_CURRENT_BINARY_DIR})
 set_target_properties(${TARGET_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR})
 
