@@ -9,37 +9,22 @@
 #ifndef EFFECTS_H
 #define EFFECTS_H
 
-#include <memory>
-#include <LightHelper.h>
-#include <RenderStates.h>
-
-#include <GameObject.h>
-
-#include <Buffer.h>
 #include <IEffect.h>
 #include <Material.h>
 #include <MeshData.h>
-#include <LightHelper.h>
 
-class BasicEffect : public IEffect, public IEffectTransform,
+class ForwardEffect : public IEffect, public IEffectTransform,
     public IEffectMaterial, public IEffectMeshData
 {
 public:
-    struct InstancedData
-    {
-        DirectX::XMFLOAT4X4 world;
-        DirectX::XMFLOAT4X4 worldInvTranspose;
-    };
+    ForwardEffect();
+    virtual ~ForwardEffect() override;
 
-public:
-    BasicEffect();
-    virtual ~BasicEffect() override;
-
-    BasicEffect(BasicEffect&& moveFrom) noexcept;
-    BasicEffect& operator=(BasicEffect&& moveFrom) noexcept;
+    ForwardEffect(ForwardEffect&& moveFrom) noexcept;
+    ForwardEffect& operator=(ForwardEffect&& moveFrom) noexcept;
 
     // 获取单例
-    static BasicEffect& Get();
+    static ForwardEffect& Get();
 
     // 初始化所需资源
     bool InitAll(ID3D11Device* device);
@@ -51,7 +36,6 @@ public:
     void XM_CALLCONV SetWorldMatrix(DirectX::FXMMATRIX W) override;
     void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V) override;
     void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P) override;
-
 
     //
     // IEffectMaterial
@@ -65,29 +49,22 @@ public:
 
     MeshDataInput GetInputData(const MeshData& meshData) override;
 
+
     //
-    // BasicEffect
+    // ForwardEffect
     //
+
+    void SetLightBuffer(ID3D11ShaderResourceView* lightBuffer);
+
+    void SetLightingOnly(bool enable);
+    void SetFaceNormals(bool enable);
+    void SetVisualizeLightCount(bool enable);
 
     // 默认状态来绘制
     void SetRenderDefault();
 
-    // 绘制实例
-    void DrawInstanced(ID3D11DeviceContext* deviceContext, Buffer& instancedBuffer, const GameObject& object, uint32_t numObjects);
-
-    // 各种类型灯光允许的最大数目
-    static const int maxLights = 5;
-
-    void SetDirLight(uint32_t pos, const DirectionalLight& dirLight);
-    void SetPointLight(uint32_t pos, const PointLight& pointLight);
-    void SetSpotLight(uint32_t pos, const SpotLight& spotLight);
-
-    void SetEyePos(const DirectX::XMFLOAT3& eyePos);
-
-    void SetFogState(bool isOn);
-    void SetFogStart(float fogStart);
-    void SetFogColor(const DirectX::XMFLOAT4& fogColor);
-    void SetFogRange(float fogRange);
+    // 进行Pre-Z通道绘制
+    void SetRenderPreZPass();
 
     // 应用常量缓冲区和纹理资源的变更
     void Apply(ID3D11DeviceContext* deviceContext) override;
@@ -98,7 +75,7 @@ private:
 };
 
 class SkyboxEffect : public IEffect, public IEffectTransform,
-    public IEffectMaterial, public IEffectMeshData
+    public IEffectMeshData, public IEffectMaterial
 {
 public:
     SkyboxEffect();
@@ -148,6 +125,9 @@ public:
     // 设置场景渲染图
     void SetLitTexture(ID3D11ShaderResourceView* litTexture);
 
+    // 设置MSAA采样等级
+    void SetMsaaSamples(UINT msaaSamples);
+
     //
     // IEffect
     //
@@ -160,68 +140,80 @@ private:
     std::unique_ptr<Impl> pImpl;
 };
 
-class ParticleEffect : public IEffect
+class DeferredEffect : public IEffect, public IEffectTransform,
+    public IEffectMaterial, public IEffectMeshData
 {
 public:
-    struct VertexParticle
-    {
-        DirectX::XMFLOAT3 initialPos;
-        DirectX::XMFLOAT3 initialVel;
-        DirectX::XMFLOAT2 size;
-        float age;
-        uint32_t type;
-    };
 
-    struct InputData
-    {
-        ID3D11InputLayout* pInputLayout;
-        D3D11_PRIMITIVE_TOPOLOGY topology;
-        uint32_t stride;
-        uint32_t offset;
-    };
+    DeferredEffect();
+    virtual ~DeferredEffect() override;
 
-public:
-    ParticleEffect();
-    virtual ~ParticleEffect() override;
+    DeferredEffect(DeferredEffect&& moveFrom) noexcept;
+    DeferredEffect& operator=(DeferredEffect&& moveFrom) noexcept;
 
-    ParticleEffect(ParticleEffect&& moveFrom) noexcept;
-    ParticleEffect& operator=(ParticleEffect&& moveFrom) noexcept;
+    // 获取单例
+    static DeferredEffect& Get();
 
-    bool InitAll(ID3D11Device* device, std::wstring_view filename);
+    // 初始化所需资源
+    bool InitAll(ID3D11Device* device);
 
-    // vertexCount为0时调用drawAuto
-    void RenderToVertexBuffer(
-        ID3D11DeviceContext* deviceContext,
-        ID3D11Buffer* input,
-        ID3D11Buffer* output,
-        uint32_t vertexCount = 0);  
-    // 绘制粒子系统
-    InputData SetRenderDefault();
+    //
+    // IEffectTransform
+    //
 
-    void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V);
-    void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P);
+    void XM_CALLCONV SetWorldMatrix(DirectX::FXMMATRIX W) override;
+    void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V) override;
+    void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P) override;
 
-    void SetEyePos(const DirectX::XMFLOAT3& eyePos);
+    //
+    // IEffectMaterial
+    //
 
-    void SetGameTime(float t);
-    void SetTimeStep(float step);
+    void SetMaterial(const Material& material) override;
 
-    void SetEmitDir(const DirectX::XMFLOAT3& dir);
-    void SetEmitPos(const DirectX::XMFLOAT3& pos);
+    //
+    // IEffectMeshData
+    //
 
-    void SetEmitInterval(float t);
-    void SetAliveTime(float t);
-
-    void SetAcceleration(const DirectX::XMFLOAT3& accel);
-
-    void SetTextureInput(ID3D11ShaderResourceView* textureInput);
-    void SetTextureRandom(ID3D11ShaderResourceView* textureRandom);
-
-    void SetRasterizerState(ID3D11RasterizerState* rasterizerState);
-    void SetBlendState(ID3D11BlendState* blendState, const float blendFactor[4], uint32_t sampleMask);
-    void SetDepthStencilState(ID3D11DepthStencilState* depthStencilState, UINT stencilRef);
+    MeshDataInput GetInputData(const MeshData& meshData) override;
 
     // 
+    // BasicDeferredEffect
+    //
+
+    void SetMsaaSamples(UINT msaaSamples);
+
+    void SetLightingOnly(bool enable);
+    void SetFaceNormals(bool enable);
+    void SetVisualizeLightCount(bool enable);
+    void SetVisualizeShadingFreq(bool enable);
+
+    void SetCameraNearFar(float nearZ, float farZ);
+
+    // 绘制G缓冲区
+    void SetRenderGBuffer();
+
+    // 将法线G-Buffer渲染到目标纹理
+    void DebugNormalGBuffer(ID3D11DeviceContext* deviceContext,
+        ID3D11RenderTargetView* rtv,
+        ID3D11ShaderResourceView* normalGBuffer,
+        D3D11_VIEWPORT viewport);
+
+    // 将深度值梯度的G-Buffer渲染到到目标纹理
+    void DebugPosZGradGBuffer(ID3D11DeviceContext* deviceContext,
+        ID3D11RenderTargetView* rtv,
+        ID3D11ShaderResourceView* posZGradGBuffer,
+        D3D11_VIEWPORT viewport);
+
+    // 传统延迟渲染
+    void ComputeLightingDefault(ID3D11DeviceContext* deviceContext,
+        ID3D11RenderTargetView* litBufferRTV,
+        ID3D11DepthStencilView* depthBufferReadOnlyDSV,
+        ID3D11ShaderResourceView* lightBufferSRV,
+        ID3D11ShaderResourceView* GBuffers[4],
+        D3D11_VIEWPORT viewport);
+
+    //
     // IEffect
     //
 

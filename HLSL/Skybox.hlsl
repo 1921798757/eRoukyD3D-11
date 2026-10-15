@@ -1,23 +1,22 @@
+
 #ifndef SKYBOX_HLSL
 #define SKYBOX_HLSL
 
-uniform matrix g_ViewProj;
+#include "GBuffer.hlsl"
 
-struct VertexPosNormalTex
-{
-    float3 posL : POSITION;
-    float3 normalL : NORMAL;
-    float2 texCoord : TEXCOORD;
-};
+#ifndef MSAA_SAMPLES
+#define MSAA_SAMPLES 1
+#endif
 
 //--------------------------------------------------------------------------------------
 // 后处理, 天空盒等
 // 使用天空盒几何体渲染
 //--------------------------------------------------------------------------------------
 TextureCube<float4> g_SkyboxTexture : register(t5);
-Texture2D<float> g_DepthTexture : register(t6);
-// 常规场景渲染的纹理
-Texture2D<float4> g_LitTexture : register(t7);
+Texture2DMS<float, MSAA_SAMPLES> g_DepthTexture : register(t6);
+
+// 常规多重采样的场景渲染的纹理
+Texture2DMS<float4, MSAA_SAMPLES> g_LitTexture : register(t7);
 
 struct SkyboxVSOut
 {
@@ -36,24 +35,40 @@ SkyboxVSOut SkyboxVS(VertexPosNormalTex input)
     return output;
 }
 
-SamplerState g_SamplerDiffuse : register(s0);
-
 float4 SkyboxPS(SkyboxVSOut input) : SV_Target
 {
     uint2 coords = input.posViewport.xy;
 
     float3 lit = float3(0.0f, 0.0f, 0.0f);
-    float depth = g_DepthTexture[coords];
-    if (depth >= 1.0f)
+    float skyboxSamples = 0.0f;
+#if MSAA_SAMPLES <= 1
+    [unroll]
+#endif
+    for (unsigned int sampleIndex = 0; sampleIndex < MSAA_SAMPLES; ++sampleIndex)
     {
-        lit += g_SkyboxTexture.Sample(g_SamplerDiffuse, input.skyboxCoord).rgb;
+        float depth = g_DepthTexture.Load(coords, sampleIndex);
+
+        // 检查天空盒的状态（注意：反向Z!）  
+        if (depth <= 0.0f && !g_VisualizeLightCount)
+        {
+            ++skyboxSamples;
+        }
+        else
+        {
+            lit += g_LitTexture.Load(coords, sampleIndex).xyz;
+        }
     }
-    else
+
+    // 如果这里没有场景渲染，则渲染天空盒
+    [branch]
+    if (skyboxSamples > 0)
     {
-        lit += g_LitTexture[coords].rgb;
+        float3 skybox = g_SkyboxTexture.Sample(g_Sam, input.skyboxCoord).xyz;
+        lit += skyboxSamples * skybox;
     }
     
-    return float4(lit, 1.0f);
+    // Resolve 多重采样(简单盒型滤波)
+    return float4(lit * rcp((float)MSAA_SAMPLES), 1.0f);
 }
 
 
