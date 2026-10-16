@@ -5,9 +5,10 @@
 #include <DXTrace.h>
 #include <Vertex.h>
 #include <TextureManager.h>
+#include "HLSL/ShaderDefines.h"
 using namespace DirectX;
 
-# pragma warning(disable: 26812)
+#pragma warning(disable: 26812)
 
 
 //
@@ -101,7 +102,7 @@ bool DeferredEffect::InitAll(ID3D11Device * device)
     //
     HR(pImpl->m_pEffectHelper->CreateShaderFromFile("FullScreenTriangleVS", L"HLSL\\FullScreenTriangle.hlsl",
         device, "FullScreenTriangleVS", "vs_5_0", defines));
-    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("GeometryVS", L"HLSL\\GBuffer.hlsl", 
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("GeometryVS", L"HLSL\\GBuffer.hlsl",
         device, "GeometryVS", "vs_5_0", defines, blob.GetAddressOf()));
     // 创建顶点布局
     HR(device->CreateInputLayout(VertexPosNormalTex::GetInputLayout(), ARRAYSIZE(VertexPosNormalTex::GetInputLayout()),
@@ -111,7 +112,7 @@ bool DeferredEffect::InitAll(ID3D11Device * device)
     while (msaaSamples <= 8)
     {
         // ******************
-        // 创建像素着色器
+        // 创建像素/计算着色器
         //
         std::string msaaSamplesStr = std::to_string(msaaSamples);
         defines[0].Definition = msaaSamplesStr.c_str();
@@ -120,8 +121,9 @@ bool DeferredEffect::InitAll(ID3D11Device * device)
             "RequiresPerSampleShading_" + msaaSamplesStr + "xMSAA_PS",
             "BasicDeferred_" + msaaSamplesStr + "xMSAA_PS",
             "BasicDeferredPerSample_" + msaaSamplesStr + "xMSAA_PS",
-            "DebugNormal" + msaaSamplesStr + "xMSAA_PS",
-            "DebugPosZGrad" + msaaSamplesStr + "xMSAA_PS",
+            "DebugNormal_" + msaaSamplesStr + "xMSAA_PS",
+            "DebugPosZGrad_" + msaaSamplesStr + "xMSAA_PS",
+            "ComputeShaderTileDeferred_" + msaaSamplesStr + "xMSAA_CS"
         };
 
         HR(pImpl->m_pEffectHelper->CreateShaderFromFile(shaderNames[0], L"HLSL\\GBuffer.hlsl",
@@ -136,6 +138,8 @@ bool DeferredEffect::InitAll(ID3D11Device * device)
             device, "DebugNormalPS", "ps_5_0", defines));
         HR(pImpl->m_pEffectHelper->CreateShaderFromFile(shaderNames[5], L"HLSL\\GBuffer.hlsl",
             device, "DebugPosZGradPS", "ps_5_0", defines));
+        HR(pImpl->m_pEffectHelper->CreateShaderFromFile(shaderNames[6], L"HLSL\\ComputeShaderTile.hlsl",
+            device, "ComputeShaderTileDeferredCS", "cs_5_0", defines));
 
         // ******************
         // 创建通道
@@ -150,7 +154,8 @@ bool DeferredEffect::InitAll(ID3D11Device * device)
             "Lighting_Basic_Deferred_PerPixel_" + msaaSamplesStr + "xMSAA",
             "Lighting_Basic_Deferred_PerSample_" + msaaSamplesStr + "xMSAA",
             "DebugNormal_" + msaaSamplesStr + "xMSAA",
-            "DebugPosZGrad_" + msaaSamplesStr + "xMSAA"
+            "DebugPosZGrad_" + msaaSamplesStr + "xMSAA",
+            "ComputeShaderTileDeferred_" + msaaSamplesStr + "xMSAA"
         }; 
 
         HR(pImpl->m_pEffectHelper->AddEffectPass(passNames[0], device, &passDesc));
@@ -195,6 +200,11 @@ bool DeferredEffect::InitAll(ID3D11Device * device)
         passDesc.namePS = shaderNames[5].c_str();
         HR(pImpl->m_pEffectHelper->AddEffectPass(passNames[5], device, &passDesc));
 
+        passDesc.nameVS = "";
+        passDesc.namePS = "";
+        passDesc.nameCS = shaderNames[6].c_str();
+        HR(pImpl->m_pEffectHelper->AddEffectPass(passNames[6], device, &passDesc));
+
         msaaSamples <<= 1;
     }
     
@@ -203,8 +213,8 @@ bool DeferredEffect::InitAll(ID3D11Device * device)
     // 设置调试对象名
 #if (defined(DEBUG) || defined(_DEBUG)) && (GRAPHICS_DEBUGGER_OBJECT_NAME)
     SetDebugObjectName(pImpl->m_pVertexPosNormalTexLayout.Get(), "DeferredEffect.VertexPosNormalTexLayout");
-#endif
     pImpl->m_pEffectHelper->SetDebugObjectName("DeferredEffect");
+#endif
 
     return true;
 }
@@ -248,7 +258,7 @@ void DeferredEffect::SetRenderGBuffer()
     pImpl->m_Topology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 }
 
-void DeferredEffect::DebugNormalGBuffer(ID3D11DeviceContext* deviceContext,
+void DeferredEffect::DebugNormalGBuffer(ID3D11DeviceContext* deviceContext, 
     ID3D11RenderTargetView* rtv,
     ID3D11ShaderResourceView* normalGBuffer,
     D3D11_VIEWPORT viewport)
@@ -265,17 +275,16 @@ void DeferredEffect::DebugNormalGBuffer(ID3D11DeviceContext* deviceContext,
     pPass->Apply(deviceContext);
     deviceContext->OMSetRenderTargets(1, &rtv, nullptr);
     deviceContext->Draw(3, 0);
-
+    
     // 清空
     deviceContext->OMSetRenderTargets(0, nullptr, nullptr);
-    int slot = pImpl->m_pEffectHelper->MapShaderResourceSlot("g_GBufferTextures[0]");
-    normalGBuffer = nullptr;
-    deviceContext->PSSetShaderResources(slot, 1, &normalGBuffer);
+    pImpl->m_pEffectHelper->SetShaderResourceByName("g_GBufferTextures[0]", nullptr);
+    pPass->Apply(deviceContext);
 }
 
-void DeferredEffect::DebugPosZGradGBuffer(ID3D11DeviceContext* deviceContext,
-    ID3D11RenderTargetView* rtv,
-    ID3D11ShaderResourceView* posZGradGBuffer,
+void DeferredEffect::DebugPosZGradGBuffer(ID3D11DeviceContext* deviceContext, 
+    ID3D11RenderTargetView* rtv, 
+    ID3D11ShaderResourceView* posZGradGBuffer, 
     D3D11_VIEWPORT viewport)
 {
     // 设置全屏三角形
@@ -332,7 +341,7 @@ void DeferredEffect::ComputeLightingDefault(
         deviceContext->OMSetRenderTargets(0, 0, depthBufferReadOnlyDSV);
         deviceContext->Draw(3, 0);
     }
-
+    
     // 通过模板测试来绘制逐像素着色的区域
     ID3D11RenderTargetView* pRTVs[1] = { litBufferRTV };
     deviceContext->OMSetRenderTargets(1, pRTVs, depthBufferReadOnlyDSV);
@@ -352,6 +361,47 @@ void DeferredEffect::ComputeLightingDefault(
     ID3D11ShaderResourceView* nullSRVs[8]{};
     deviceContext->VSSetShaderResources(0, 8, nullSRVs);
     deviceContext->PSSetShaderResources(0, 8, nullSRVs);
+}
+
+void DeferredEffect::ComputeTiledLightCulling(ID3D11DeviceContext* deviceContext, 
+    ID3D11UnorderedAccessView* litFlatBufferUAV, 
+    ID3D11ShaderResourceView* lightBufferSRV, 
+    ID3D11ShaderResourceView* GBuffers[4])
+{
+    // 不需要清空操作，我们写入所有的像素
+
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> pTex;
+    GBuffers[0]->GetResource(reinterpret_cast<ID3D11Resource**>(pTex.GetAddressOf()));
+    D3D11_TEXTURE2D_DESC texDesc;
+    pTex->GetDesc(&texDesc);
+    
+    UINT dims[2] = { texDesc.Width, texDesc.Height };
+    pImpl->m_pEffectHelper->GetConstantBufferVariable("g_FramebufferDimensions")->SetUIntVector(2, dims);
+    pImpl->m_pEffectHelper->SetShaderResourceByName("g_GBufferTextures[0]", GBuffers[0]);
+    pImpl->m_pEffectHelper->SetShaderResourceByName("g_GBufferTextures[1]", GBuffers[1]);
+    pImpl->m_pEffectHelper->SetShaderResourceByName("g_GBufferTextures[2]", GBuffers[2]);
+    pImpl->m_pEffectHelper->SetShaderResourceByName("g_GBufferTextures[3]", GBuffers[3]);
+    pImpl->m_pEffectHelper->SetShaderResourceByName("g_Light", lightBufferSRV);
+    pImpl->m_pEffectHelper->SetUnorderedAccessByName("g_Framebuffer", litFlatBufferUAV, 0);
+
+    std::string passName = "ComputeShaderTileDeferred_" + std::to_string(pImpl->m_MsaaSamples) + "xMSAA";
+    auto pPass = pImpl->m_pEffectHelper->GetEffectPass(passName);
+    pPass->Apply(deviceContext);
+    pPass->Dispatch(deviceContext, texDesc.Width, texDesc.Height);
+    
+    // 清空
+
+    int slot = pImpl->m_pEffectHelper->MapUnorderedAccessSlot("g_Framebuffer");
+    litFlatBufferUAV = nullptr;
+    deviceContext->CSSetUnorderedAccessViews(slot, 1, &litFlatBufferUAV, nullptr);
+
+    slot = pImpl->m_pEffectHelper->MapShaderResourceSlot("g_Light");
+    lightBufferSRV = nullptr;
+    deviceContext->CSSetShaderResources(slot, 1, &lightBufferSRV);
+
+    ID3D11ShaderResourceView* nullSRVs[4] = {};
+    slot = pImpl->m_pEffectHelper->MapShaderResourceSlot("g_GBufferTextures[0]");
+    deviceContext->CSSetShaderResources(slot, 4, nullSRVs);
 }
 
 void XM_CALLCONV DeferredEffect::SetWorldMatrix(DirectX::FXMMATRIX W)

@@ -13,6 +13,7 @@
 #include <Collision.h>
 #include <ModelManager.h>
 #include <TextureManager.h>
+#include "HLSL/ShaderDefines.h"
 
 // 需要与着色器中的PointLight对应
 struct PointLight
@@ -32,6 +33,12 @@ struct PointLightInitData
     float animationSpeed;
 };
 
+struct TileInfo
+{
+    UINT numLights;
+    UINT lightIndices[MAX_LIGHT_INDICES];
+};
+
 
 
 class GameApp : public D3DApp
@@ -39,12 +46,13 @@ class GameApp : public D3DApp
 public:
     // 光源裁剪技术
     enum class LightCullTechnique {
-        CULL_FORWARD_NONE = 0,    // 前向渲染，无光照裁剪
-        CULL_FORWARD_PREZ_NONE,   // 前向渲染，预写入深度，无光照裁剪
-        CULL_DEFERRED_NONE,       // 传统延迟渲染
+        CULL_FORWARD_NONE = 0,                 // 前向渲染，无光照裁剪
+        CULL_FORWARD_PREZ_NONE,                // 前向渲染，预写入深度，无光照裁剪
+        CULL_FORWARD_COMPUTE_SHADER_TILE,      // 前向渲染，预写入深度，Tile-Based光照裁剪
+        CULL_DEFERRED_NONE,                    // 传统延迟渲染
+        CULL_DEFERRED_COMPUTE_SHADER_TILE      // Tile-Based延迟渲染
     };
 
-    const UINT MAX_LIGHTS = 1024;
 public:
     GameApp(HINSTANCE hInstance, const std::wstring& windowName, int initWidth = 1280, int initHeight = 720);
     ~GameApp();
@@ -75,12 +83,13 @@ private:
     
     // GPU计时
     GpuTimer m_GpuTimer_PreZ;
+    GpuTimer m_GpuTimer_LightCulling;
     GpuTimer m_GpuTimer_Geometry;
     GpuTimer m_GpuTimer_Lighting;
     GpuTimer m_GpuTimer_Skybox;
 
     // 设置
-    LightCullTechnique m_LightCullTechnique = LightCullTechnique::CULL_DEFERRED_NONE;
+    LightCullTechnique m_LightCullTechnique = LightCullTechnique::CULL_DEFERRED_COMPUTE_SHADER_TILE;
     bool m_AnimateLights = false;
     bool m_LightingOnly = false;
     bool m_FaceNormals = false;
@@ -91,41 +100,43 @@ private:
 
 
     // 各种资源
-    TextureManager m_TextureManager;                                // 纹理读取管理
-    ModelManager m_ModelManager;									// 模型读取管理
+    TextureManager m_TextureManager;                                        // 纹理读取管理
+    ModelManager m_ModelManager;                                            // 模型读取管理
     UINT m_MsaaSamples = 1;
     bool m_MsaaSamplesChanged = false;
-    std::unique_ptr<Texture2DMS> m_pLitBuffer;                      // 场景渲染缓冲区
-    std::unique_ptr<Depth2DMS> m_pDepthBuffer;                      // 深度缓冲区
-    ComPtr<ID3D11DepthStencilView> m_pDepthBufferReadOnlyDSV;       // 只读深度模板视图
-    std::vector<std::unique_ptr<Texture2DMS>> m_pGBuffers;          // G-Buffers
-    std::unique_ptr<Texture2D> m_pDebugNormalGBuffer;               // 调试显示用的法线缓冲区
-    std::unique_ptr<Texture2D> m_pDebugPosZGradGBuffer;			    // 调试显示用的Z梯度缓冲区
-    std::unique_ptr<Texture2D> m_pDebugAlbedoGBuffer;               // 调试显示用的颜色缓冲区
+    std::unique_ptr<Texture2DMS> m_pLitBuffer;                              // 场景渲染缓冲区
+    std::unique_ptr<StructuredBuffer<DirectX::XMUINT2>> m_pFlatLitBuffer;   // 场景渲染缓冲区(TBDR)
+    std::unique_ptr<Depth2DMS> m_pDepthBuffer;                              // 深度缓冲区
+    ComPtr<ID3D11DepthStencilView> m_pDepthBufferReadOnlyDSV;               // 只读深度模板视图
+    std::vector<std::unique_ptr<Texture2DMS>> m_pGBuffers;                  // G-Buffers
+    std::unique_ptr<Texture2D> m_pDebugNormalGBuffer;                       // 调试显示用的法线缓冲区
+    std::unique_ptr<Texture2D> m_pDebugPosZGradGBuffer;                     // 调试显示用的Z梯度缓冲区
+    std::unique_ptr<Texture2D> m_pDebugAlbedoGBuffer;                       // 调试显示用的颜色缓冲区
 
     // 用于一次性传递
     std::vector<ID3D11RenderTargetView*> m_pGBufferRTVs;
     std::vector<ID3D11ShaderResourceView*> m_pGBufferSRVs;
 
     // 光照
-    UINT m_ActiveLights = (MAX_LIGHTS >> 2);
+    UINT m_ActiveLights = (MAX_LIGHTS >> 3);
     std::vector<PointLightInitData> m_PointLightInitDatas;
     std::vector<PointLight> m_PointLightParams;
     std::vector<DirectX::XMFLOAT3> m_PointLightPosWorlds;
     std::unique_ptr<StructuredBuffer<PointLight>> m_pLightBuffer;   // 点光源缓冲区
+    std::unique_ptr<StructuredBuffer<TileInfo>> m_pTileBuffer;      // 点光源光源索引缓冲区
 
     // 模型
-    GameObject m_Sponza;											// 场景模型
-    GameObject m_Skybox;											// 天空盒模型
+    GameObject m_Sponza;                                            // 场景模型
+    GameObject m_Skybox;                                            // 天空盒模型
 
     // 特效
-    ForwardEffect m_ForwardEffect;				                    // 前向渲染特效
-    DeferredEffect m_DeferredEffect;				                // 延迟渲染特效
-    SkyboxEffect m_SkyboxEffect;			                        // 天空盒特效
+    ForwardEffect m_ForwardEffect;                                  // 前向渲染特效
+    DeferredEffect m_DeferredEffect;                                // 延迟渲染特效
+    SkyboxEffect m_SkyboxEffect;                                    // 天空盒特效
 
     // 摄像机
-    std::shared_ptr<Camera> m_pCamera;								// 摄像机
-    FirstPersonCameraController m_FPSCameraController;				// 摄像机控制器
+    std::shared_ptr<Camera> m_pCamera;                              // 摄像机
+    FirstPersonCameraController m_FPSCameraController;              // 摄像机控制器
 
 };
 

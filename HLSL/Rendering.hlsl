@@ -16,36 +16,30 @@ float linstep(float min_value, float max_value, float value)
 //--------------------------------------------------------------------------------------
 // 几何阶段 
 //--------------------------------------------------------------------------------------
-// t0：漫反射贴图；s0：与之配套的采样器
 Texture2D g_DiffuseMap : register(t0);
 SamplerState g_Sam : register(s0);
 
-// 顶点着色器输入：来自顶点缓冲，全部在局部空间
 struct VertexPosNormalTex
 {
-    float3 posL : POSITION;    // 局部空间位置
-    float3 normalL : NORMAL;   // 局部空间法线
-    float2 texCoord : TEXCOORD; // 纹理坐标
+    float3 posL : POSITION;
+    float3 normalL : NORMAL;
+    float2 texCoord : TEXCOORD;
 };
 
-// 顶点着色器输出 / 像素着色器输入
 struct VertexPosHVNormalVTex
 {
-    float4 posH : SV_POSITION;  // 齐次裁剪空间位置，供光栅化与深度测试使用
-    float3 posV : POSITION;     // 视图空间（相机空间）位置，光照计算用
-    float3 normalV : NORMAL;    // 视图空间法线，光照计算用
-    float2 texCoord : TEXCOORD; // 纹理坐标
+    float4 posH : SV_POSITION;
+    float3 posV : POSITION;
+    float3 normalV : NORMAL;
+    float2 texCoord : TEXCOORD;
 };
 
 VertexPosHVNormalVTex GeometryVS(VertexPosNormalTex input)
 {
     VertexPosHVNormalVTex output;
 
-    // 局部空间 -> 齐次裁剪空间（位置补 w=1，保留齐次坐标）
     output.posH = mul(float4(input.posL, 1.0f), g_WorldViewProj);
-    // 局部空间 -> 视图空间（位置补 w=1，取 xyz）
     output.posV = mul(float4(input.posL, 1.0f), g_WorldView).xyz;
-    // 局部空间法线 -> 视图空间（法线是方向，补 w=0，避免被矩阵的平移部分影响）
     output.normalV = mul(float4(input.normalL, 0.0f), g_WorldInvTransposeView).xyz;
     output.texCoord = input.texCoord;
     

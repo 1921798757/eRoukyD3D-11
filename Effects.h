@@ -13,7 +13,7 @@
 #include <Material.h>
 #include <MeshData.h>
 
-class ForwardEffect : public IEffect, public IEffectTransform,
+class ForwardEffect : public IEffect, public IEffectTransform, 
     public IEffectMaterial, public IEffectMeshData
 {
 public:
@@ -54,7 +54,11 @@ public:
     // ForwardEffect
     //
 
+    void SetMsaaSamples(UINT msaaSamples);
+
     void SetLightBuffer(ID3D11ShaderResourceView* lightBuffer);
+    void SetTileBuffer(ID3D11ShaderResourceView* tileBuffer);
+    void SetCameraNearFar(float nearZ, float farZ);
 
     void SetLightingOnly(bool enable);
     void SetFaceNormals(bool enable);
@@ -65,6 +69,13 @@ public:
 
     // 进行Pre-Z通道绘制
     void SetRenderPreZPass();
+    // 执行分块光照裁剪
+    void ComputeTiledLightCulling(ID3D11DeviceContext* deviceContext,
+        ID3D11UnorderedAccessView* tileInfoBufferUAV,
+        ID3D11ShaderResourceView* lightBufferSRV,
+        ID3D11ShaderResourceView* depthBufferSRV);
+    // 根据裁剪后的光照数据绘制
+    void SetRenderWithTiledLightCulling();
 
     // 应用常量缓冲区和纹理资源的变更
     void Apply(ID3D11DeviceContext* deviceContext) override;
@@ -97,7 +108,7 @@ public:
 
     // 无用
     void XM_CALLCONV SetWorldMatrix(DirectX::FXMMATRIX W) override;
-
+    
     void XM_CALLCONV SetViewMatrix(DirectX::FXMMATRIX V) override;
     void XM_CALLCONV SetProjMatrix(DirectX::FXMMATRIX P) override;
 
@@ -124,6 +135,8 @@ public:
     void SetDepthTexture(ID3D11ShaderResourceView* depthTexture);
     // 设置场景渲染图
     void SetLitTexture(ID3D11ShaderResourceView* litTexture);
+    // 设置TBDR场景渲染图
+    void SetFlatLitTexture(ID3D11ShaderResourceView* flatLitTexture, UINT width, UINT height);
 
     // 设置MSAA采样等级
     void SetMsaaSamples(UINT msaaSamples);
@@ -133,14 +146,14 @@ public:
     //
 
     // 应用常量缓冲区和纹理资源的变更
-    void Apply(ID3D11DeviceContext* deviceContext) override;
+    void Apply(ID3D11DeviceContext * deviceContext) override;
 
 private:
     class Impl;
     std::unique_ptr<Impl> pImpl;
 };
 
-class DeferredEffect : public IEffect, public IEffectTransform,
+class DeferredEffect : public IEffect, public IEffectTransform, 
     public IEffectMaterial, public IEffectMeshData
 {
 public:
@@ -213,6 +226,12 @@ public:
         ID3D11ShaderResourceView* GBuffers[4],
         D3D11_VIEWPORT viewport);
 
+    // 执行分块光照裁剪
+    void ComputeTiledLightCulling(ID3D11DeviceContext* deviceContext,
+        ID3D11UnorderedAccessView* litFlatBufferUAV,
+        ID3D11ShaderResourceView* lightBufferSRV,
+        ID3D11ShaderResourceView* GBuffers[4]);
+
     //
     // IEffect
     //
@@ -224,5 +243,6 @@ private:
     class Impl;
     std::unique_ptr<Impl> pImpl;
 };
+
 
 #endif

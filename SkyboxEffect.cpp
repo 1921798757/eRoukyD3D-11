@@ -7,10 +7,11 @@
 #include <TextureManager.h>
 using namespace DirectX;
 
+# pragma warning(disable: 26812)
+
 //
 // SkyboxEffect::Impl 需要先于SkyboxEffect的定义
 //
-
 
 class SkyboxEffect::Impl
 {
@@ -51,7 +52,7 @@ namespace
 SkyboxEffect::SkyboxEffect()
 {
     if (g_pInstance)
-        throw std::exception("SkyboxEffect is a singleton!");
+        throw std::exception("BasicEffect is a singleton!");
     g_pInstance = this;
     pImpl = std::make_unique<SkyboxEffect::Impl>();
 }
@@ -100,7 +101,7 @@ bool SkyboxEffect::InitAll(ID3D11Device * device)
     // 创建顶点着色器
     //
 
-    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("SkyboxVS", L"HLSL\\Skybox.hlsl", 
+    HR(pImpl->m_pEffectHelper->CreateShaderFromFile("SkyboxVS", L"HLSL\\Skybox.hlsl",
         device, "SkyboxVS", "vs_5_0", defines, blob.GetAddressOf()));
     // 创建顶点布局
     HR(device->CreateInputLayout(VertexPosNormalTex::GetInputLayout(), ARRAYSIZE(VertexPosNormalTex::GetInputLayout()),
@@ -125,9 +126,9 @@ bool SkyboxEffect::InitAll(ID3D11Device * device)
         EffectPassDesc passDesc;
         passDesc.nameVS = "SkyboxVS";
         passDesc.namePS = shaderName.c_str();
-        HR(pImpl->m_pEffectHelper->AddEffectPass(passName, device, &passDesc));
+        HR(pImpl->m_pEffectHelper->AddEffectPass(passName.c_str(), device, &passDesc));
         {
-            auto pPass = pImpl->m_pEffectHelper->GetEffectPass(passName);
+            auto pPass = pImpl->m_pEffectHelper->GetEffectPass(passName.c_str());
             pPass->SetRasterizerState(RenderStates::RSNoCull.Get());
         }
         
@@ -135,13 +136,13 @@ bool SkyboxEffect::InitAll(ID3D11Device * device)
         msaaSamples <<= 1;
     }
     
-    pImpl->m_pEffectHelper->SetSamplerStateByName("g_Sam", RenderStates::SSAnistropicWrap16x.Get());
+    pImpl->m_pEffectHelper->SetSamplerStateByName("g_Sam", RenderStates::SSLinearWrap.Get());
 
     // 设置调试对象名
 #if (defined(DEBUG) || defined(_DEBUG)) && (GRAPHICS_DEBUGGER_OBJECT_NAME)
     SetDebugObjectName(pImpl->m_pVertexPosNormalTexLayout.Get(), "SkyEffect.VertexPosNormalTexLayout");
+    pImpl->m_pEffectHelper->SetDebugObjectName("SkyEffect");
 #endif
-    pImpl->m_pEffectHelper->SetDebugObjectName("SkyboxEffect");
 
     return true;
 }
@@ -204,6 +205,13 @@ void SkyboxEffect::SetDepthTexture(ID3D11ShaderResourceView* depthTexture)
 void SkyboxEffect::SetLitTexture(ID3D11ShaderResourceView* litTexture)
 {
     pImpl->m_pEffectHelper->SetShaderResourceByName("g_LitTexture", litTexture);
+}
+
+void SkyboxEffect::SetFlatLitTexture(ID3D11ShaderResourceView* flatLitTexture, UINT width, UINT height)
+{
+    pImpl->m_pEffectHelper->SetShaderResourceByName("g_FlatLitTexture", flatLitTexture);
+    UINT wh[2] = { width, height };
+    pImpl->m_pEffectHelper->GetConstantBufferVariable("g_FramebufferDimensions")->SetUIntVector(2, wh);
 }
 
 void SkyboxEffect::SetMsaaSamples(UINT msaaSamples)

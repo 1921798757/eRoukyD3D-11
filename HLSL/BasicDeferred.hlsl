@@ -16,14 +16,14 @@ float4 BasicDeferred(float4 posViewport, uint sampleIndex)
     [branch]
     if (g_VisualizeLightCount)
     {
-        // ç”¨äº®åº¦è¡¨ç¤ºè¯¥åƒç´ ä¼šè¢«å¤šå°‘ç¯å…‰å¤„ç†
+        // ÓÃÁÁ¶È±íÊ¾¸ÃÏñËØ»á±»¶àÉÙµÆ¹â´¦Àí
         lit = (float(totalLights) * rcp(255.0f)).xxx;
     }
     else
     {
         SurfaceData surface = ComputeSurfaceDataFromGBufferSample(uint2(posViewport.xy), sampleIndex);
 
-        // é¿å…å¯¹å¤©ç©ºç›’/èƒŒæ™¯åƒç´ ç€è‰²
+        // ±ÜÃâ¶ÔÌì¿ÕºĞ/±³¾°ÏñËØ×ÅÉ«
         if (surface.posV.z < g_CameraNearFar.y)
         {
             for (uint lightIndex = 0; lightIndex < totalLights; ++lightIndex)
