@@ -53,10 +53,10 @@ public:
     ComPtr<ID3D11InputLayout> m_pCurrInputLayout;
     D3D11_PRIMITIVE_TOPOLOGY m_Topology = D3D11_PRIMITIVE_TOPOLOGY_UNDEFINED;
 
-    ComPtr<ID3D11InputLayout> m_pVertexPosNormalTexLayout;
+    Microsoft::WRL::ComPtr<ID3D11InputLayout> m_pVertexPosNormalTexLayout;
 
     XMFLOAT4X4 m_World{}, m_View{}, m_Proj{};
-    float m_Weights[16];
+    float m_Weights[16]{};
     int m_BlurSize = 5;
     float m_BlurSigma = 1.0f;
 };
@@ -111,9 +111,9 @@ bool ShadowEffect::InitAll(ID3D11Device* device)
 
     pImpl->m_pEffectHelper = std::make_unique<EffectHelper>();
 
-    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache");
-
     Microsoft::WRL::ComPtr<ID3DBlob> blob;
+
+    pImpl->m_pEffectHelper->SetBinaryCacheDirectory(L"HLSL\\Cache");
 
     // ******************
     // 创建顶点着色器
@@ -473,8 +473,9 @@ void XM_CALLCONV ShadowEffect::SetProjMatrix(DirectX::FXMMATRIX P)
 void ShadowEffect::SetMaterial(const Material& material)
 {
     TextureManager& tm = TextureManager::Get();
+
     auto pStr = material.TryGet<std::string>("$Diffuse");
-    pImpl->m_pEffectHelper->SetShaderResourceByName("g_DiffuseMap", pStr ? tm.GetTexture(*pStr) : nullptr);
+    pImpl->m_pEffectHelper->SetShaderResourceByName("g_TextureDiffuse", pStr ? tm.GetTexture(*pStr) : tm.GetNullTexture());
 }
 
 MeshDataInput ShadowEffect::GetInputData(const MeshData& meshData)
