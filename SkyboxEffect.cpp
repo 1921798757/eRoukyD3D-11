@@ -7,11 +7,10 @@
 #include <TextureManager.h>
 using namespace DirectX;
 
-# pragma warning(disable: 26812)
-
 //
 // SkyboxEffect::Impl 需要先于SkyboxEffect的定义
 //
+
 
 class SkyboxEffect::Impl
 {
@@ -46,13 +45,13 @@ public:
 namespace
 {
     // SkyEffect单例
-    static SkyboxEffect * g_pInstance = nullptr;
+    static SkyboxEffect* g_pInstance = nullptr;
 }
 
 SkyboxEffect::SkyboxEffect()
 {
     if (g_pInstance)
-        throw std::exception("BasicEffect is a singleton!");
+        throw std::exception("SkyboxEffect is a singleton!");
     g_pInstance = this;
     pImpl = std::make_unique<SkyboxEffect::Impl>();
 }
@@ -61,25 +60,25 @@ SkyboxEffect::~SkyboxEffect()
 {
 }
 
-SkyboxEffect::SkyboxEffect(SkyboxEffect && moveFrom) noexcept
+SkyboxEffect::SkyboxEffect(SkyboxEffect&& moveFrom) noexcept
 {
     pImpl.swap(moveFrom.pImpl);
 }
 
-SkyboxEffect & SkyboxEffect::operator=(SkyboxEffect && moveFrom) noexcept
+SkyboxEffect& SkyboxEffect::operator=(SkyboxEffect&& moveFrom) noexcept
 {
     pImpl.swap(moveFrom.pImpl);
     return *this;
 }
 
-SkyboxEffect & SkyboxEffect::Get()
+SkyboxEffect& SkyboxEffect::Get()
 {
     if (!g_pInstance)
         throw std::exception("BasicEffect needs an instance!");
     return *g_pInstance;
 }
 
-bool SkyboxEffect::InitAll(ID3D11Device * device)
+bool SkyboxEffect::InitAll(ID3D11Device* device)
 {
     if (!device)
         return false;
@@ -126,23 +125,23 @@ bool SkyboxEffect::InitAll(ID3D11Device * device)
         EffectPassDesc passDesc;
         passDesc.nameVS = "SkyboxVS";
         passDesc.namePS = shaderName.c_str();
-        HR(pImpl->m_pEffectHelper->AddEffectPass(passName.c_str(), device, &passDesc));
+        HR(pImpl->m_pEffectHelper->AddEffectPass(passName, device, &passDesc));
         {
-            auto pPass = pImpl->m_pEffectHelper->GetEffectPass(passName.c_str());
+            auto pPass = pImpl->m_pEffectHelper->GetEffectPass(passName);
             pPass->SetRasterizerState(RenderStates::RSNoCull.Get());
         }
-        
+
 
         msaaSamples <<= 1;
     }
-    
-    pImpl->m_pEffectHelper->SetSamplerStateByName("g_Sam", RenderStates::SSLinearWrap.Get());
+
+    pImpl->m_pEffectHelper->SetSamplerStateByName("g_SamplerDiffuse", RenderStates::SSLinearWrap.Get());
 
     // 设置调试对象名
 #if (defined(DEBUG) || defined(_DEBUG)) && (GRAPHICS_DEBUGGER_OBJECT_NAME)
     SetDebugObjectName(pImpl->m_pVertexPosNormalTexLayout.Get(), "SkyEffect.VertexPosNormalTexLayout");
-    pImpl->m_pEffectHelper->SetDebugObjectName("SkyEffect");
 #endif
+    pImpl->m_pEffectHelper->SetDebugObjectName("SkyboxEffect");
 
     return true;
 }
@@ -207,19 +206,12 @@ void SkyboxEffect::SetLitTexture(ID3D11ShaderResourceView* litTexture)
     pImpl->m_pEffectHelper->SetShaderResourceByName("g_LitTexture", litTexture);
 }
 
-void SkyboxEffect::SetFlatLitTexture(ID3D11ShaderResourceView* flatLitTexture, UINT width, UINT height)
-{
-    pImpl->m_pEffectHelper->SetShaderResourceByName("g_FlatLitTexture", flatLitTexture);
-    UINT wh[2] = { width, height };
-    pImpl->m_pEffectHelper->GetConstantBufferVariable("g_FramebufferDimensions")->SetUIntVector(2, wh);
-}
-
 void SkyboxEffect::SetMsaaSamples(UINT msaaSamples)
 {
     pImpl->m_MsaaLevels = msaaSamples;
 }
 
-void SkyboxEffect::Apply(ID3D11DeviceContext * deviceContext)
+void SkyboxEffect::Apply(ID3D11DeviceContext* deviceContext)
 {
     XMMATRIX VP = XMLoadFloat4x4(&pImpl->m_View) * XMLoadFloat4x4(&pImpl->m_Proj);
     VP = XMMatrixTranspose(VP);

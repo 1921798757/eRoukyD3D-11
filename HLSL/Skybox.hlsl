@@ -2,12 +2,18 @@
 #ifndef SKYBOX_TONE_MAP_HLSL
 #define SKYBOX_TONE_MAP_HLSL
 
-#include "GBuffer.hlsl"
-#include "FramebufferFlat.hlsl"
-
 #ifndef MSAA_SAMPLES
 #define MSAA_SAMPLES 1
 #endif
+
+uniform matrix g_ViewProj;
+
+struct VertexPosNormalTex
+{
+    float3 posL : POSITION;
+    float3 normalL : NORMAL;
+    float2 texCoord : TEXCOORD;
+};
 
 //--------------------------------------------------------------------------------------
 // 后处理, 天空盒等
@@ -18,8 +24,6 @@ Texture2DMS<float, MSAA_SAMPLES> g_DepthTexture : register(t6);
 
 // 常规多重采样的场景渲染的纹理
 Texture2DMS<float4, MSAA_SAMPLES> g_LitTexture : register(t7);
-// 计算着色器不能写入多重采样UAV，故使用1D连续数组表示
-StructuredBuffer<uint2> g_FlatLitTexture : register(t8);
 
 struct SkyboxVSOut
 {
@@ -38,13 +42,10 @@ SkyboxVSOut SkyboxVS(VertexPosNormalTex input)
     return output;
 }
 
+SamplerState g_SamplerDiffuse : register(s0);
+
 float4 SkyboxPS(SkyboxVSOut input) : SV_Target
 {
-    // 如果提供了1D的MSAA场景渲染缓冲区，就使用它
-    uint2 dims;
-    g_FlatLitTexture.GetDimensions(dims.x, dims.y);
-    bool useFlatLitBuffer = dims.x > 0;
-    
     uint2 coords = input.posViewport.xy;
 
     float3 lit = float3(0.0f, 0.0f, 0.0f);
@@ -56,25 +57,15 @@ float4 SkyboxPS(SkyboxVSOut input) : SV_Target
     {
         float depth = g_DepthTexture.Load(coords, sampleIndex);
 
-        // 检查天空盒的状态（注意：反向Z!）  
-        if (depth <= 0.0f && !g_VisualizeLightCount)
+        // 注意：反向Z
+        if (depth <= 0.0f)
         {
             ++skyboxSamples;
         }
+
         else
         {
-            float3 sampleLit;
-            [branch]
-            if (useFlatLitBuffer)
-            {
-                sampleLit = UnpackRGBA16(g_FlatLitTexture[GetFramebufferSampleAddress(coords, sampleIndex)]).xyz;
-            }
-            else
-            {
-                sampleLit = g_LitTexture.Load(coords, sampleIndex).xyz;
-            }
-            
-            lit += sampleLit;
+            lit += g_LitTexture.Load(coords, sampleIndex).xyz;
         }
     }
 
@@ -82,12 +73,12 @@ float4 SkyboxPS(SkyboxVSOut input) : SV_Target
     [branch]
     if (skyboxSamples > 0)
     {
-        float3 skybox = g_SkyboxTexture.Sample(g_Sam, input.skyboxCoord).xyz;
+        float3 skybox = g_SkyboxTexture.Sample(g_SamplerDiffuse, input.skyboxCoord).xyz;
         lit += skyboxSamples * skybox;
     }
     
     // Resolve 多重采样(简单盒型滤波)
-    return float4(lit * rcp((float)MSAA_SAMPLES), 1.0f);
+    return float4(lit * rcp((float) MSAA_SAMPLES), 1.0f);
 }
 
 
