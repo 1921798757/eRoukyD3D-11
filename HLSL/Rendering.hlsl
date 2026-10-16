@@ -6,12 +6,13 @@
 #include "ConstantBuffers.hlsl"
 #include "CascadedShadow.hlsl"
 
-//--------------------------------------------------------------------------------------
-// 几何阶段 
-//--------------------------------------------------------------------------------------
+
 Texture2D g_DiffuseMap : register(t0);
 SamplerState g_Sam : register(s0);
 
+//--------------------------------------------------------------------------------------
+// 几何阶段 
+//--------------------------------------------------------------------------------------
 struct VertexPosNormalTex
 {
     float3 posL : POSITION;
@@ -42,6 +43,30 @@ VertexOut GeometryVS(VertexPosNormalTex input)
     return output;
 }
 
+//--------------------------------------------------------------------------------------
+// 延迟阴影阶段
+//--------------------------------------------------------------------------------------
+void DeferredShadowWithColorPS(VertexOut input,
+                               out float percentLit : SV_Target0,
+                               out float4 visualizeCascadeColor : SV_Target1)
+{
+    int cascadeIndex = 0;
+    int nextCascadeIndex = 0;
+    float blendAmount = 0.0f;
+    percentLit = CalculateCascadedShadow(input.shadowPosV, input.depthV,
+                                         cascadeIndex, nextCascadeIndex, blendAmount);
+    visualizeCascadeColor = GetCascadeColorMultipler(cascadeIndex, nextCascadeIndex, saturate(blendAmount));
+}
+
+float DeferredShadowPS(VertexOut input) : SV_Target
+{
+    int cascadeIndex = 0;
+    int nextCascadeIndex = 0;
+    float blendAmount = 0.0f;
+    float percentLit = CalculateCascadedShadow(input.shadowPosV, input.depthV,
+                                               cascadeIndex, nextCascadeIndex, blendAmount);
+    return percentLit;
+}
 
 //--------------------------------------------------------------------------------------
 // 光照阶段 
@@ -79,6 +104,5 @@ float4 ForwardPS(VertexOut input) : SV_Target
     lighting = lerp(shadowLighting, lighting, percentLit);
     return lighting * visualizeCascadeColor * diffuse;
 }
-
 
 #endif // RENDERING_HLSL

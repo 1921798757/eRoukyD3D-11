@@ -5,7 +5,36 @@ using namespace DirectX;
 HRESULT CascadedShadowManager::InitResource(ID3D11Device* device)
 {
 
-    m_pCSMTextureArray = std::make_unique<Depth2DArray>(device, m_ShadowSize, m_ShadowSize, m_CascadeLevels);
+    DXGI_FORMAT format = DXGI_FORMAT_R32_FLOAT;
+    if (m_ShadowBits == 4)
+    {
+        switch (m_ShadowType)
+        {
+        case ShadowType::ShadowType_ESM:
+        case ShadowType::ShadowType_CSM: format = DXGI_FORMAT_R32_FLOAT; break;
+        case ShadowType::ShadowType_VSM:
+        case ShadowType::ShadowType_EVSM2: format = DXGI_FORMAT_R32G32_FLOAT; break;
+        case ShadowType::ShadowType_EVSM4: format = DXGI_FORMAT_R32G32B32A32_FLOAT; break;
+        }
+    }
+    else if (m_ShadowBits == 2)
+    {
+        switch (m_ShadowType)
+        {
+        case ShadowType::ShadowType_ESM: format = DXGI_FORMAT_R16_FLOAT; break;
+        case ShadowType::ShadowType_CSM: format = DXGI_FORMAT_R16_UNORM; break;
+        case ShadowType::ShadowType_VSM:format = DXGI_FORMAT_R16G16_UNORM; break;
+        case ShadowType::ShadowType_EVSM2: format = DXGI_FORMAT_R16G16_FLOAT; break;
+        case ShadowType::ShadowType_EVSM4: format = DXGI_FORMAT_R16G16B16A16_FLOAT; break;
+        }
+    }
+
+    m_pCSMTextureArray = std::make_unique<Texture2DArray>(device, m_ShadowSize, m_ShadowSize, format, 
+        (uint32_t)m_CascadeLevels, m_GenerateMips ? (int)log2f((float)m_ShadowSize) + 1 : 1);
+    m_pCSMTempTexture = std::make_unique<Texture2D>(device, m_ShadowSize, m_ShadowSize, format, m_GenerateMips ? (int)log2f((float)m_ShadowSize) + 1 : 1);
+    
+    // 固定32位
+    m_pCSMDepthBuffer = std::make_unique<Depth2D>(device, m_ShadowSize, m_ShadowSize, DepthStencilBitsFlag::Depth_32Bits);
 
     m_ShadowViewport.TopLeftX = 0;
     m_ShadowViewport.TopLeftY = 0;
@@ -14,6 +43,10 @@ HRESULT CascadedShadowManager::InitResource(ID3D11Device* device)
     m_ShadowViewport.MinDepth = 0.0f;
     m_ShadowViewport.MaxDepth = 1.0f;
 
+    m_pCSMTempTexture->SetDebugObjectName("CSM Temp Texture");
+    m_pCSMTextureArray->SetDebugObjectName("CSM Texture Array");
+    m_pCSMDepthBuffer->SetDebugObjectName("CSM Depth Buffer");
+
     return S_OK;
 }
 
@@ -21,6 +54,7 @@ void CascadedShadowManager::UpdateFrame(const Camera& viewerCamera,
     const Camera& lightCamera, 
     const DirectX::BoundingBox& sceneBoundingBox)
 {
+
     XMMATRIX ViewerProj = viewerCamera.GetProjMatrixXM();
     XMMATRIX ViewerView = viewerCamera.GetViewMatrixXM();
     XMMATRIX LightView = lightCamera.GetViewMatrixXM();
@@ -100,7 +134,7 @@ void CascadedShadowManager::UpdateFrame(const Camera& viewerCamera,
         // 我们基于PCF核的大小再计算一个边界扩充值使得包围盒稍微放大一些。
         // 等比缩放不会影响前面固定大小的AABB
         {
-            float scaleDuetoBlur = m_PCFKernelSize / (float)m_ShadowSize;
+            float scaleDuetoBlur = m_BlurKernelSize / (float)m_ShadowSize;
             XMVECTORF32 scaleDuetoBlurVec = { {scaleDuetoBlur, scaleDuetoBlur, 0.0f, 0.0f} };
 
             XMVECTOR borderOffsetVec = lightCameraOrthographicMaxVec - lightCameraOrthographicMinVec;
@@ -187,8 +221,8 @@ void CascadedShadowManager::UpdateFrame(const Camera& viewerCamera,
         }
 
         XMStoreFloat4x4(m_ShadowProj + cascadeIndex,
-            XMMatrixOrthographicOffCenterLH(XMVectorGetX(
-                lightCameraOrthographicMinVec), XMVectorGetX(lightCameraOrthographicMaxVec),
+            XMMatrixOrthographicOffCenterLH(
+                XMVectorGetX(lightCameraOrthographicMinVec), XMVectorGetX(lightCameraOrthographicMaxVec),
                 XMVectorGetY(lightCameraOrthographicMinVec), XMVectorGetY(lightCameraOrthographicMaxVec),
                 nearPlane, farPlane));
 
